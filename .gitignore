@@ -1,0 +1,5 @@
+ref_proj/
+.spec-workflow/
+.claude/
+.bmad-core/
+docs/
