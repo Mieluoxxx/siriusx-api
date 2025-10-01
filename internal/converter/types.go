@@ -168,6 +168,115 @@ type OpenAIUsage struct {
 }
 
 
+// Streaming Types - 流式响应类型定义
+
+// OpenAIStreamChunk OpenAI 流式响应块
+type OpenAIStreamChunk struct {
+	ID      string               `json:"id"`
+	Object  string               `json:"object"` // "chat.completion.chunk"
+	Created int64                `json:"created"`
+	Model   string               `json:"model"`
+	Choices []OpenAIStreamChoice `json:"choices"`
+}
+
+// OpenAIStreamChoice OpenAI 流式选项
+type OpenAIStreamChoice struct {
+	Index        int                `json:"index"`
+	Delta        OpenAIStreamDelta  `json:"delta"`
+	FinishReason *string            `json:"finish_reason"` // null until last chunk
+}
+
+// OpenAIStreamDelta OpenAI 流式增量数据
+type OpenAIStreamDelta struct {
+	Role      string                    `json:"role,omitempty"`      // 第一个 chunk 包含 role
+	Content   string                    `json:"content,omitempty"`   // 文本增量
+	ToolCalls []OpenAIStreamToolCall    `json:"tool_calls,omitempty"` // tool calls 增量
+}
+
+// OpenAIStreamToolCall OpenAI 流式工具调用
+type OpenAIStreamToolCall struct {
+	Index    int                        `json:"index"`
+	ID       string                     `json:"id,omitempty"`
+	Type     string                     `json:"type,omitempty"`
+	Function *OpenAIStreamFunctionCall  `json:"function,omitempty"`
+}
+
+// OpenAIStreamFunctionCall OpenAI 流式函数调用
+type OpenAIStreamFunctionCall struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"` // 增量参数
+}
+
+// ClaudeStreamEvent Claude 流式事件
+type ClaudeStreamEvent struct {
+	Type  string      `json:"type"` // 事件类型
+	Event string      `json:"-"`    // SSE event 字段 (不序列化到 data)
+	Data  interface{} `json:"-"`    // 实际数据 (根据 Type 不同而不同)
+}
+
+// ClaudeMessageStart message_start 事件数据
+type ClaudeMessageStart struct {
+	Type    string                  `json:"type"` // "message_start"
+	Message ClaudeMessageMetadata   `json:"message"`
+}
+
+// ClaudeMessageMetadata 消息元数据
+type ClaudeMessageMetadata struct {
+	ID         string               `json:"id"`
+	Type       string               `json:"type"` // "message"
+	Role       string               `json:"role"` // "assistant"
+	Content    []ClaudeContentBlock `json:"content"`
+	Model      string               `json:"model"`
+	StopReason *string              `json:"stop_reason"`
+	Usage      ClaudeUsage          `json:"usage"`
+}
+
+// ClaudeContentBlockStart content_block_start 事件数据
+type ClaudeContentBlockStart struct {
+	Type         string             `json:"type"` // "content_block_start"
+	Index        int                `json:"index"`
+	ContentBlock ClaudeContentBlock `json:"content_block"`
+}
+
+// ClaudeContentBlockDelta content_block_delta 事件数据
+type ClaudeContentBlockDelta struct {
+	Type  string            `json:"type"` // "content_block_delta"
+	Index int               `json:"index"`
+	Delta ClaudeDelta       `json:"delta"`
+}
+
+// ClaudeDelta 增量数据
+type ClaudeDelta struct {
+	Type        string `json:"type"` // "text_delta" | "input_json_delta"
+	Text        string `json:"text,omitempty"` // text_delta 的文本
+	PartialJSON string `json:"partial_json,omitempty"` // input_json_delta 的 JSON
+}
+
+// ClaudeContentBlockStop content_block_stop 事件数据
+type ClaudeContentBlockStop struct {
+	Type  string `json:"type"` // "content_block_stop"
+	Index int    `json:"index"`
+}
+
+// ClaudeMessageDelta message_delta 事件数据
+type ClaudeMessageDelta struct {
+	Type  string                  `json:"type"` // "message_delta"
+	Delta ClaudeMessageDeltaData  `json:"delta"`
+	Usage *ClaudeUsage            `json:"usage,omitempty"`
+}
+
+// ClaudeMessageDeltaData message delta 数据
+type ClaudeMessageDeltaData struct {
+	StopReason   *string `json:"stop_reason,omitempty"`
+	StopSequence *string `json:"stop_sequence,omitempty"`
+}
+
+// ClaudeMessageStop message_stop 事件数据
+type ClaudeMessageStop struct {
+	Type string `json:"type"` // "message_stop"
+}
+
+
 // Helper functions
 
 // StringPtr 返回字符串指针
