@@ -1,5 +1,93 @@
-ref_proj/
-.spec-workflow/
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+siriusx-api
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of go coverage tool
+*.out
+
+# Go workspace files
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node.js (Frontend)
+web/node_modules/
+web/.env.local
+web/.env.production
+web/.env.development
+web/dist/
+web/.astro/
+
+# Logs
+*.log
+logs/
+log/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Configuration files (sensitive)
+config/config.yaml
+config/config.local.yaml
+config/config.production.yaml
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Build artifacts
+build/
+dist/
+
+# Docker
+.dockerignore
+
+# Testing
+coverage.txt
+coverage.html
+test-results/
+
+# Air (live reload)
+.air.toml
+tmp/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Development tools
+.air.toml
+.bin/
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Keep existing directories
 .claude/
-.bmad-core/
-docs/

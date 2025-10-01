@@ -1,0 +1,3 @@
+[submodule "ref_proj/claude-code-nexus"]
+	path = ref_proj/claude-code-nexus
+	url = https://github.com/KroMiose/claude-code-nexus.git
