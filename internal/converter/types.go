@@ -63,6 +63,25 @@ type ClaudeToolChoice struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// ClaudeResponse Claude Messages API 响应
+type ClaudeResponse struct {
+	ID           string               `json:"id"`
+	Type         string               `json:"type"` // "message"
+	Role         string               `json:"role"` // "assistant"
+	Content      []ClaudeContentBlock `json:"content"`
+	Model        string               `json:"model"`
+	StopReason   string               `json:"stop_reason,omitempty"`   // "end_turn" | "max_tokens" | "stop_sequence" | "tool_use"
+	StopSequence *string              `json:"stop_sequence,omitempty"` // which stop sequence was hit
+	Usage        ClaudeUsage          `json:"usage"`
+}
+
+// ClaudeUsage Claude token 使用情况
+type ClaudeUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
+
 // OpenAI Types - OpenAI Chat Completions API 请求和响应类型定义
 
 // OpenAIRequest OpenAI Chat Completions API 请求
@@ -123,6 +142,31 @@ type OpenAIFunctionDef struct {
 	Description string                 `json:"description,omitempty"`
 	Parameters  map[string]interface{} `json:"parameters,omitempty"`
 }
+
+// OpenAIResponse OpenAI Chat Completions API 响应
+type OpenAIResponse struct {
+	ID      string                `json:"id"`
+	Object  string                `json:"object"` // "chat.completion"
+	Created int64                 `json:"created"`
+	Model   string                `json:"model"`
+	Choices []OpenAIChoice        `json:"choices"`
+	Usage   OpenAIUsage           `json:"usage"`
+}
+
+// OpenAIChoice OpenAI 响应选项
+type OpenAIChoice struct {
+	Index        int           `json:"index"`
+	Message      OpenAIMessage `json:"message"`
+	FinishReason string        `json:"finish_reason"` // "stop" | "length" | "tool_calls" | "content_filter"
+}
+
+// OpenAIUsage OpenAI token 使用情况
+type OpenAIUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
 
 // Helper functions
 
