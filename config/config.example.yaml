@@ -14,16 +14,16 @@ server:
 
 # 数据库配置
 database:
-  # 数据库类型: sqlite
-  type: "sqlite"
   # SQLite 数据库文件路径
-  path: "data/siriusx.db"
-  # 是否启用日志
-  log_mode: true
+  path: "./data/siriusx.db"
+  # 最大打开连接数 (SQLite 建议不超过 25)
+  max_open_conns: 10
   # 最大空闲连接数
-  max_idle_conns: 10
-  # 最大打开连接数
-  max_open_conns: 100
+  max_idle_conns: 5
+  # 连接最大生命周期 (如 1h, 30m, 3600s)
+  conn_max_lifetime: "1h"
+  # 是否自动迁移数据表
+  auto_migrate: true
 
 # 日志配置
 logging:

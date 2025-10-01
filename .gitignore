@@ -47,7 +47,9 @@ log/
 *.db
 *.sqlite
 *.sqlite3
-data/
+data/*.db
+data/*.sqlite
+!data/.gitkeep
 
 # Configuration files (sensitive)
 config/config.yaml
