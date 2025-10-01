@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/Mieluoxxx/Siriusx-API/internal/crypto"
 )
 
 // DatabaseConfig 数据库配置
@@ -23,8 +25,9 @@ type ServerConfig struct {
 
 // Config 应用配置
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
+	Server        ServerConfig   `mapstructure:"server"`
+	Database      DatabaseConfig `mapstructure:"database"`
+	EncryptionKey []byte         // 加密密钥（从环境变量 ENCRYPTION_KEY 读取）
 }
 
 // LoadConfig 加载配置（简化版，暂不依赖 Viper）
@@ -54,6 +57,19 @@ func LoadConfig(configPath string) (*Config, error) {
 		if _, err := fmt.Sscanf(port, "%d", &p); err == nil {
 			config.Server.Port = p
 		}
+	}
+
+	// 加载加密密钥
+	// 在生产环境中，强烈建议配置 ENCRYPTION_KEY
+	encryptionKey, err := crypto.LoadEncryptionKey()
+	if err == nil {
+		config.EncryptionKey = encryptionKey
+	} else {
+		// 检查是否为生产环境
+		if env := os.Getenv("GO_ENV"); env == "production" {
+			return nil, fmt.Errorf("生产环境必须配置 ENCRYPTION_KEY 环境变量: %v", err)
+		}
+		// 开发环境仅警告，不阻止启动
 	}
 
 	return config, nil

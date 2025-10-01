@@ -91,5 +91,4 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Keep existing directories
-.claude/
+.claude/settings.json
