@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/Mieluoxxx/Siriusx-API/internal/api/handlers"
+	"github.com/Mieluoxxx/Siriusx-API/internal/mapping"
 	"github.com/Mieluoxxx/Siriusx-API/internal/provider"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -25,6 +26,9 @@ func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 	{
 		// 供应商 API
 		setupProviderRoutes(apiGroup, db, encryptionKey)
+
+		// 统一模型 API
+		setupModelRoutes(apiGroup, db)
 	}
 
 	return router
@@ -53,5 +57,23 @@ func setupProviderRoutes(group *gin.RouterGroup, db *gorm.DB, encryptionKey []by
 		providers.GET("/:id", handler.GetProvider)
 		providers.PUT("/:id", handler.UpdateProvider)
 		providers.DELETE("/:id", handler.DeleteProvider)
+	}
+}
+
+// setupModelRoutes 配置统一模型路由
+func setupModelRoutes(group *gin.RouterGroup, db *gorm.DB) {
+	// 创建依赖
+	repo := mapping.NewRepository(db)
+	service := mapping.NewService(repo)
+	handler := handlers.NewModelHandler(service)
+
+	// 注册路由
+	models := group.Group("/models")
+	{
+		models.POST("", handler.CreateModel)
+		models.GET("", handler.ListModels)
+		models.GET("/:id", handler.GetModel)
+		models.PUT("/:id", handler.UpdateModel)
+		models.DELETE("/:id", handler.DeleteModel)
 	}
 }
