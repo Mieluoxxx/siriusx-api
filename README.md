@@ -4,7 +4,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](https://github.com/moguw/Siriusx-API)
+[![Status](https://img.shields.io/badge/Status-In%20Development-yellow)](https://github.com/Mieluoxxx/Siriusx-API)
 
 ---
 
@@ -82,7 +82,7 @@ Siriusx-API 是一个**轻量级、可自托管的 AI 模型聚合网关**，旨
 
 ```bash
 # 克隆项目
-git clone https://github.com/moguw/Siriusx-API.git
+git clone https://github.com/Mieluoxxx/Siriusx-API.git
 cd Siriusx-API
 
 # 下载 Go 依赖
@@ -210,8 +210,8 @@ make help       # 显示帮助信息
 
 ## 📧 联系方式
 
-- **项目主页**: [https://github.com/moguw/Siriusx-API](https://github.com/moguw/Siriusx-API)
-- **问题反馈**: [GitHub Issues](https://github.com/moguw/Siriusx-API/issues)
+- **项目主页**: [https://github.com/Mieluoxxx/Siriusx-API](https://github.com/Mieluoxxx/Siriusx-API)
+- **问题反馈**: [GitHub Issues](https://github.com/Mieluoxxx/Siriusx-API/issues)
 
 ---
 

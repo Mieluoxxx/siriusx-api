@@ -1,0 +1,154 @@
+# Siriusx-API 配置文件示例
+# 复制此文件为 config.yaml 并根据实际情况修改
+
+# 服务器配置
+server:
+  # 服务监听地址
+  host: "0.0.0.0"
+  # 服务监听端口
+  port: 8080
+  # 运行模式: debug, release, test
+  mode: "debug"
+  # 请求超时时间（秒）
+  timeout: 30
+
+# 数据库配置
+database:
+  # 数据库类型: sqlite
+  type: "sqlite"
+  # SQLite 数据库文件路径
+  path: "data/siriusx.db"
+  # 是否启用日志
+  log_mode: true
+  # 最大空闲连接数
+  max_idle_conns: 10
+  # 最大打开连接数
+  max_open_conns: 100
+
+# 日志配置
+logging:
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  # 日志格式: json, console
+  format: "console"
+  # 日志输出路径
+  output: "logs/app.log"
+  # 是否同时输出到控制台
+  console: true
+
+# 供应商配置 (示例)
+providers:
+  # 示例供应商 1
+  - name: "provider-1"
+    enabled: true
+    # OpenAI 兼容的 API Base URL
+    base_url: "https://api.example.com/v1"
+    # API Keys (支持多个 Key 轮询)
+    api_keys:
+      - "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    # 优先级 (数值越小优先级越高)
+    priority: 1
+    # 权重 (用于负载均衡)
+    weight: 100
+    # 超时时间（秒）
+    timeout: 30
+    # 重试次数
+    max_retries: 3
+
+  # 示例供应商 2
+  - name: "provider-2"
+    enabled: false
+    base_url: "https://api.another.com/v1"
+    api_keys:
+      - "sk-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    priority: 2
+    weight: 50
+    timeout: 30
+    max_retries: 3
+
+# 模型映射配置 (示例)
+models:
+  # 自定义模型名称映射
+  - name: "claude-sonnet-4"
+    # 上游模型名称列表 (来自不同供应商)
+    aliases:
+      - "claude-4-sonnet"
+      - "claude-sonnet-4.0"
+    # 下游转发端点类型: openai, claude
+    endpoint_type: "claude"
+    # 是否启用
+    enabled: true
+
+  - name: "gpt-4-turbo"
+    aliases:
+      - "gpt-4-turbo-preview"
+      - "gpt-4-1106-preview"
+    endpoint_type: "openai"
+    enabled: true
+
+# 负载均衡配置
+load_balancer:
+  # 负载均衡策略: round_robin, weighted, priority
+  strategy: "weighted"
+  # 健康检查间隔（秒）
+  health_check_interval: 60
+  # 故障转移启用
+  failover_enabled: true
+  # 最大重试次数
+  max_retries: 3
+
+# 令牌管理配置
+token:
+  # 令牌轮询策略: round_robin, random
+  rotation_strategy: "round_robin"
+  # 令牌失效后的冷却时间（秒）
+  cooldown_period: 300
+
+# API 端点配置
+api:
+  # OpenAI 兼容端点
+  openai_endpoint: "/v1/chat/completions"
+  # Claude 端点
+  claude_endpoint: "/v1/messages"
+  # 是否启用流式响应
+  enable_streaming: true
+
+# 监控配置
+monitoring:
+  # 是否启用 Prometheus metrics
+  prometheus_enabled: false
+  # Metrics 端点
+  metrics_path: "/metrics"
+  # 是否记录请求统计
+  request_stats_enabled: true
+
+# CORS 配置
+cors:
+  # 是否启用 CORS
+  enabled: true
+  # 允许的源
+  allowed_origins:
+    - "*"
+  # 允许的方法
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  # 允许的头部
+  allowed_headers:
+    - "Origin"
+    - "Content-Type"
+    - "Authorization"
+  # 是否允许凭证
+  allow_credentials: true
+
+# 速率限制配置
+rate_limit:
+  # 是否启用速率限制
+  enabled: false
+  # 每分钟最大请求数
+  requests_per_minute: 60
+  # 突发请求数
+  burst: 10
