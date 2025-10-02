@@ -71,40 +71,30 @@ echo "   http://localhost:4321"
 echo ""
 echo "================================"
 echo ""
+echo "🎯 启动后端服务..."
 
-# 询问是否立即启动
-read -p "是否现在启动服务? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "🎯 启动后端服务..."
+# 后台启动后端
+nohup go run ./cmd/server > logs/backend.log 2>&1 &
+BACKEND_PID=$!
+echo "✅ 后端服务已启动 (PID: $BACKEND_PID)"
+echo "   日志文件: logs/backend.log"
 
-    # 后台启动后端
-    nohup go run ./cmd/server > logs/backend.log 2>&1 &
-    BACKEND_PID=$!
-    echo "✅ 后端服务已启动 (PID: $BACKEND_PID)"
-    echo "   日志文件: logs/backend.log"
+# 等待后端启动
+sleep 3
 
-    # 等待后端启动
-    sleep 3
+echo ""
+echo "🎨 启动前端服务..."
 
-    echo ""
-    echo "🎨 启动前端服务..."
-
-    # 前台启动前端 (用户可以 Ctrl+C 停止)
-    cd web
-    if [ "$PKG_MANAGER" = "pnpm" ]; then
-        pnpm dev
-    else
-        npm run dev
-    fi
-
-    # 用户按 Ctrl+C 后停止后端
-    echo ""
-    echo "🛑 停止后端服务..."
-    kill $BACKEND_PID 2>/dev/null || true
-    echo "✅ 所有服务已停止"
+# 前台启动前端 (用户可以 Ctrl+C 停止)
+cd web
+if [ "$PKG_MANAGER" = "pnpm" ]; then
+    pnpm dev
 else
-    echo ""
-    echo "💡 提示: 请按照上述说明手动启动服务"
+    npm run dev
 fi
+
+# 用户按 Ctrl+C 后停止后端
+echo ""
+echo "🛑 停止后端服务..."
+kill $BACKEND_PID 2>/dev/null || true
+echo "✅ 所有服务已停止"
