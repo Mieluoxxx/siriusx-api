@@ -11,16 +11,29 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func setupTestDB(t *testing.T) *gorm.DB {
+// TestingInterface 通用测试接口，支持 *testing.T 和 *testing.B
+type TestingInterface interface {
+	Errorf(format string, args ...interface{})
+	FailNow()
+	Helper()
+}
+
+func setupTestDB(t TestingInterface) *gorm.DB {
 	// 直接创建内存数据库
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("Failed to connect to database: %v", err)
+		t.FailNow()
+	}
 
 	// 手动迁移所有需要的模型
 	err = db.AutoMigrate(&models.UnifiedModel{}, &models.Provider{}, &models.ModelMapping{})
-	require.NoError(t, err)
+	if err != nil {
+		t.Errorf("Failed to migrate database: %v", err)
+		t.FailNow()
+	}
 
 	return db
 }
