@@ -75,10 +75,12 @@ Siriusx-API 是一个**轻量级、可自托管的 AI 模型聚合网关**，旨
 ### 环境要求
 
 - **Go**: 1.21 或更高版本
+- **Node.js**: 20+ 和 **pnpm** (用于前端开发)
 - **Docker**: 20.10+ (可选，用于容器化部署)
-- **Node.js**: 20+ (可选，用于前端开发)
 
-### 安装依赖
+### 方式一：本地开发（推荐）
+
+#### 1. 安装依赖
 
 ```bash
 # 克隆项目
@@ -87,26 +89,61 @@ cd Siriusx-API
 
 # 下载 Go 依赖
 go mod download
+
+# 安装前端依赖
+cd web
+pnpm install
+cd ..
 ```
 
-### 启动服务
+#### 2. 启动后端服务
 
 ```bash
-# 使用 Makefile 启动
-make run
-
-# 或直接使用 Go 命令
+# 在项目根目录下启动后端
 go run ./cmd/server
+
+# 或使用 Makefile
+make run
 ```
 
-### 构建项目
+后端服务将在 **http://localhost:8080** 启动
+
+#### 3. 启动前端服务
 
 ```bash
-# 构建二进制文件
+# 在另一个终端，进入前端目录
+cd web
+
+# 启动开发服务器
+pnpm dev
+```
+
+前端服务将在 **http://localhost:4321** 启动
+
+#### 4. 访问管理界面
+
+打开浏览器访问: **http://localhost:4321**
+
+### 方式二：构建生产版本
+
+```bash
+# 构建后端二进制文件
 make build
 
-# 运行编译后的程序
+# 构建前端静态文件
+cd web
+pnpm build
+cd ..
+
+# 运行后端（自动提供静态文件）
 ./bin/siriusx-api
+```
+
+### 方式三：Docker 部署（待实现）
+
+```bash
+# 使用 Docker Compose 一键启动
+docker-compose up -d
 ```
 
 ---
@@ -255,7 +292,34 @@ make help       # 显示帮助信息
 - [x] Story 3.1: 供应商 CRUD API
 - [x] Story 3.2: API Key 加密存储 ✅
 
-### Epic 4-7: 更多功能敬请期待...
+### Epic 4: 路由解析与请求处理 ✅
+- [x] Story 4.1: 设计统一路由结构
+- [x] Story 4.2: 实现模型映射查询逻辑
+- [x] Story 4.3: 实现路由解析逻辑
+
+### Epic 5: 负载均衡与故障转移 ✅
+- [x] Story 5.1: 实现负载均衡器
+- [x] Story 5.2: 实现供应商选择策略
+- [x] Story 5.3: 实现智能故障转移机制
+
+### Epic 6: Token 管理系统 ✅
+- [x] Story 6.1: 设计 Token 数据模型
+- [x] Story 6.2: 实现 Token CRUD API
+- [x] Story 6.3: 实现 Token 认证中间件
+- [x] Story 6.4: 实现 Token 过期检查
+
+### Epic 7: Web 管理界面 ✅
+- [x] Story 7.1: 创建前端项目结构 (Astro + React)
+- [x] Story 7.2: 系统概览仪表板
+- [x] Story 7.3: 供应商管理界面
+- [x] Story 7.4: 模型管理界面
+- [x] Story 7.5: Token 管理界面
+- [x] Story 7.6: 整体样式优化
+
+### Epic 8-10: 更多功能敬请期待...
+- [ ] Epic 8: 监控和日志系统
+- [ ] Epic 9: Docker 部署支持
+- [ ] Epic 10: 性能优化和压力测试
 
 详细路线图请查看 [PRD 文档](docs/prd.md)。
 

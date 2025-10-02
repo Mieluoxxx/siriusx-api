@@ -92,3 +92,5 @@ yarn.lock
 pnpm-lock.yaml
 
 .claude/settings.json
+temp/
+.bmad-core/
