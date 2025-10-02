@@ -4,6 +4,7 @@ import (
 	"github.com/Mieluoxxx/Siriusx-API/internal/api/handlers"
 	"github.com/Mieluoxxx/Siriusx-API/internal/mapping"
 	"github.com/Mieluoxxx/Siriusx-API/internal/provider"
+	"github.com/Mieluoxxx/Siriusx-API/internal/token"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -29,6 +30,9 @@ func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 
 		// 统一模型 API
 		setupModelRoutes(apiGroup, db)
+
+		// Token API
+		setupTokenRoutes(apiGroup, db)
 	}
 
 	return router
@@ -88,5 +92,21 @@ func setupModelRoutes(group *gin.RouterGroup, db *gorm.DB) {
 		mappings.GET("/:id", mappingHandler.GetMapping)
 		mappings.PUT("/:id", mappingHandler.UpdateMapping)
 		mappings.DELETE("/:id", mappingHandler.DeleteMapping)
+	}
+}
+
+// setupTokenRoutes 配置 Token 路由
+func setupTokenRoutes(group *gin.RouterGroup, db *gorm.DB) {
+	// 创建依赖
+	repo := token.NewRepository(db)
+	service := token.NewService(repo)
+	handler := handlers.NewTokenHandler(service)
+
+	// 注册路由
+	tokens := group.Group("/tokens")
+	{
+		tokens.POST("", handler.CreateToken)
+		tokens.GET("", handler.ListTokens)
+		tokens.DELETE("/:id", handler.DeleteToken)
 	}
 }
