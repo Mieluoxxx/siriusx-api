@@ -106,6 +106,23 @@ func NewFailureDetector(config *FailureDetectorConfig) *DefaultFailureDetector {
 		config = DefaultFailureDetectorConfig()
 	}
 
+	// 确保关键配置项有合法的默认值
+	if config.FailureThreshold <= 0 {
+		config.FailureThreshold = 3
+	}
+	if config.CooldownDuration <= 0 {
+		config.CooldownDuration = 5 * time.Minute
+	}
+	if config.TimeoutThreshold <= 0 {
+		config.TimeoutThreshold = 30 * time.Second
+	}
+	if config.CleanupInterval <= 0 {
+		config.CleanupInterval = 1 * time.Hour
+	}
+	if config.MaxFailureHistory <= 0 {
+		config.MaxFailureHistory = 1000
+	}
+
 	detector := &DefaultFailureDetector{
 		failureStates: make(map[uint]*ProviderState),
 		config:        config,
