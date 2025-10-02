@@ -171,8 +171,8 @@ func TestTokenHandler_ListTokens(t *testing.T) {
 	router, service, _ := setupTokenTestHandler(t)
 
 	// 创建测试数据
-	service.CreateToken("Token 1", nil)
-	service.CreateToken("Token 2", nil)
+	service.CreateToken("Token 1", nil, "")
+	service.CreateToken("Token 2", nil, "")
 
 	req, _ := http.NewRequest("GET", "/api/tokens", nil)
 	resp := httptest.NewRecorder()
@@ -209,7 +209,7 @@ func TestTokenHandler_DeleteToken_Success(t *testing.T) {
 	router, service, _ := setupTokenTestHandler(t)
 
 	// 创建测试数据
-	tok, _ := service.CreateToken("Test Token", nil)
+	tok, _ := service.CreateToken("Test Token", nil, "")
 
 	req, _ := http.NewRequest("DELETE", "/api/tokens/1", nil)
 	resp := httptest.NewRecorder()

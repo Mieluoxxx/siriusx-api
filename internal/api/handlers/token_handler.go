@@ -44,7 +44,7 @@ func (h *TokenHandler) CreateToken(c *gin.Context) {
 	}
 
 	// 调用 Service 创建 Token
-	tok, err := h.service.CreateToken(req.Name, req.ExpiresAt)
+	tok, err := h.service.CreateToken(req.Name, req.ExpiresAt, req.CustomToken)
 	if err != nil {
 		h.handleTokenError(c, err)
 		return
@@ -81,6 +81,39 @@ func (h *TokenHandler) ListTokens(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dtos)
+}
+
+// GetToken 获取单个 Token（包含完整 Token 值）
+// @Summary 获取单个 Token 详情
+// @Tags tokens
+// @Produce json
+// @Param id path int true "Token ID"
+// @Success 200 {object} token.TokenDTO
+// @Failure 404 {object} ErrorResponse
+// @Router /api/tokens/{id} [get]
+func (h *TokenHandler) GetToken(c *gin.Context) {
+	// 解析 ID
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_ID",
+				"message": "Invalid token ID",
+			},
+		})
+		return
+	}
+
+	// 调用 Service 获取 Token
+	tok, err := h.service.GetToken(uint(id))
+	if err != nil {
+		h.handleTokenError(c, err)
+		return
+	}
+
+	// 返回完整 Token
+	dto := token.ToTokenDTO(tok, true)
+	c.JSON(http.StatusOK, dto)
 }
 
 // DeleteToken 删除 Token
@@ -133,7 +166,14 @@ func (h *TokenHandler) handleTokenError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{
 			"error": gin.H{
 				"code":    "TOKEN_CONFLICT",
-				"message": "Failed to generate unique token",
+				"message": "Token already exists",
+			},
+		})
+	case errors.Is(err, token.ErrInvalidCustomToken):
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"code":    "INVALID_CUSTOM_TOKEN",
+				"message": "Custom token must start with 'sk-' and be at least 8 characters",
 			},
 		})
 	default:

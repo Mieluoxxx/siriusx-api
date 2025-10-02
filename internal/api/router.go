@@ -140,6 +140,7 @@ func setupTokenRoutes(group *gin.RouterGroup, db *gorm.DB) {
 	{
 		tokens.POST("", handler.CreateToken)
 		tokens.GET("", handler.ListTokens)
+		tokens.GET("/:id", handler.GetToken)     // 获取单个 Token（包含完整值）
 		tokens.DELETE("/:id", handler.DeleteToken)
 	}
 }

@@ -8,8 +8,9 @@ import (
 
 // CreateTokenRequest 创建 Token 请求
 type CreateTokenRequest struct {
-	Name      string     `json:"name" binding:"required,max=100"`
-	ExpiresAt *time.Time `json:"expires_at"`
+	Name        string     `json:"name" binding:"required,max=100"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	CustomToken string     `json:"custom_token,omitempty"` // 自定义 Token 值（可选）
 }
 
 // TokenDTO Token 数据传输对象

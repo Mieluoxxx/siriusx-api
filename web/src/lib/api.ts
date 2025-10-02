@@ -123,13 +123,22 @@ export const api = {
     return res.json();
   },
 
-  async createToken(data: { name: string; expires_at?: string }): Promise<Token & { token: string }> {
+  async getToken(id: number): Promise<Token & { token: string }> {
+    const res = await fetch(`${API_BASE_URL}/api/tokens/${id}`);
+    if (!res.ok) throw new Error('Failed to fetch token');
+    return res.json();
+  },
+
+  async createToken(data: { name: string; expires_at?: string; custom_token?: string }): Promise<Token & { token: string }> {
     const res = await fetch(`${API_BASE_URL}/api/tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error('Failed to create token');
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error?.message || 'Failed to create token');
+    }
     return res.json();
   },
 

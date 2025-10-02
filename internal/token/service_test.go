@@ -55,7 +55,7 @@ func TestService_CreateToken(t *testing.T) {
 	repo := NewRepository(db)
 	service := NewService(repo)
 
-	token, err := service.CreateToken("Test Token", nil)
+	token, err := service.CreateToken("Test Token", nil, "")
 	if err != nil {
 		t.Errorf("CreateToken() failed: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestService_CreateToken_WithExpiresAt(t *testing.T) {
 	service := NewService(repo)
 
 	futureTime := time.Now().Add(24 * time.Hour)
-	token, err := service.CreateToken("Test Token", &futureTime)
+	token, err := service.CreateToken("Test Token", &futureTime, "")
 	if err != nil {
 		t.Errorf("CreateToken() failed: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestService_CreateToken_InvalidExpiresAt(t *testing.T) {
 	service := NewService(repo)
 
 	pastTime := time.Now().Add(-24 * time.Hour)
-	_, err := service.CreateToken("Test Token", &pastTime)
+	_, err := service.CreateToken("Test Token", &pastTime, "")
 	if err != ErrInvalidExpiresAt {
 		t.Errorf("CreateToken() with past expiresAt should return ErrInvalidExpiresAt, got %v", err)
 	}
@@ -110,8 +110,8 @@ func TestService_ListTokens(t *testing.T) {
 	service := NewService(repo)
 
 	// 创建测试数据
-	service.CreateToken("Token 1", nil)
-	service.CreateToken("Token 2", nil)
+	service.CreateToken("Token 1", nil, "")
+	service.CreateToken("Token 2", nil, "")
 
 	tokens, err := service.ListTokens()
 	if err != nil {
@@ -130,7 +130,7 @@ func TestService_GetToken(t *testing.T) {
 	service := NewService(repo)
 
 	// 创建测试数据
-	created, _ := service.CreateToken("Test Token", nil)
+	created, _ := service.CreateToken("Test Token", nil, "")
 
 	// 测试获取存在的 Token
 	found, err := service.GetToken(created.ID)
@@ -155,7 +155,7 @@ func TestService_DeleteToken(t *testing.T) {
 	service := NewService(repo)
 
 	// 创建测试数据
-	token, _ := service.CreateToken("Test Token", nil)
+	token, _ := service.CreateToken("Test Token", nil, "")
 
 	// 测试删除存在的 Token
 	err := service.DeleteToken(token.ID)
@@ -183,7 +183,7 @@ func TestService_ValidateToken(t *testing.T) {
 	service := NewService(repo)
 
 	// 创建测试数据
-	token, _ := service.CreateToken("Test Token", nil)
+	token, _ := service.CreateToken("Test Token", nil, "")
 
 	// 测试有效 Token
 	valid, err := service.ValidateToken(token.Token)
@@ -208,7 +208,7 @@ func TestService_ValidateToken_Disabled(t *testing.T) {
 	service := NewService(repo)
 
 	// 先创建一个启用的 Token
-	token, _ := service.CreateToken("Disabled Token", nil)
+	token, _ := service.CreateToken("Disabled Token", nil, "")
 
 	// 然后禁用它（直接使用 DB 更新，绕过默认值问题）
 	db.Model(&models.Token{}).Where("id = ?", token.ID).Update("enabled", false)

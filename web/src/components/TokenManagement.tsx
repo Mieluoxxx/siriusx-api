@@ -7,6 +7,8 @@ export default function TokenManagement() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [visibleTokens, setVisibleTokens] = useState<Set<number>>(new Set());
+  const [fullTokens, setFullTokens] = useState<Map<number, string>>(new Map());
 
   const fetchTokens = async () => {
     try {
@@ -40,9 +42,58 @@ export default function TokenManagement() {
     setShowCreateModal(true);
   };
 
-  const handleCopyToken = (token: string) => {
-    navigator.clipboard.writeText(token);
+  const handleCopyToken = async (tokenId: number) => {
+    // 总是复制完整的 Token
+    let fullToken = fullTokens.get(tokenId);
+
+    // 如果还没有获取过完整 Token，先获取
+    if (!fullToken) {
+      try {
+        const result = await api.getToken(tokenId);
+        fullToken = result.token;
+        const newFullTokens = new Map(fullTokens);
+        newFullTokens.set(tokenId, fullToken);
+        setFullTokens(newFullTokens);
+      } catch (err) {
+        alert('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+        return;
+      }
+    }
+
+    navigator.clipboard.writeText(fullToken);
     alert('Token 已复制到剪贴板！');
+  };
+
+  const toggleTokenVisibility = async (id: number) => {
+    const newVisibleTokens = new Set(visibleTokens);
+
+    if (visibleTokens.has(id)) {
+      // 隐藏
+      newVisibleTokens.delete(id);
+      setVisibleTokens(newVisibleTokens);
+    } else {
+      // 显示 - 需要先获取完整 Token
+      if (!fullTokens.has(id)) {
+        try {
+          const result = await api.getToken(id);
+          const newFullTokens = new Map(fullTokens);
+          newFullTokens.set(id, result.token);
+          setFullTokens(newFullTokens);
+        } catch (err) {
+          alert('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+          return;
+        }
+      }
+      newVisibleTokens.add(id);
+      setVisibleTokens(newVisibleTokens);
+    }
+  };
+
+  const getDisplayToken = (token: Token) => {
+    if (visibleTokens.has(token.id) && fullTokens.has(token.id)) {
+      return fullTokens.get(token.id)!;
+    }
+    return token.token_display;
   };
 
   if (loading) {
@@ -129,8 +180,35 @@ export default function TokenManagement() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-mono text-gray-900">
-                          {token.token_display}
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-mono text-gray-900">
+                            {getDisplayToken(token)}
+                          </span>
+                          <button
+                            onClick={() => toggleTokenVisibility(token.id)}
+                            className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                            title={visibleTokens.has(token.id) ? '隐藏 Token' : '显示 Token'}
+                          >
+                            {visibleTokens.has(token.id) ? (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                              </svg>
+                            ) : (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleCopyToken(token.id)}
+                            className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                            title="复制完整 Token"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -192,10 +270,9 @@ export default function TokenManagement() {
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <ul className="list-disc list-inside space-y-1">
-                  <li>Token 创建后只会显示一次，请妥善保存</li>
-                  <li>不要在公共场合或代码仓库中暴露 Token</li>
+                  <li>不要在公共场合、聊天工具或代码仓库中暴露 Token</li>
                   <li>建议定期轮换 Token 以提高安全性</li>
-                  <li>删除的 Token 无法恢复，使用该 Token 的请求将失败</li>
+                  <li>删除的 Token 无法恢复，使用该 Token 的请求将立即失败</li>
                 </ul>
               </div>
             </div>
@@ -237,8 +314,10 @@ function CreateTokenModal({
   const [formData, setFormData] = useState({
     name: '',
     expires_at: '',
+    custom_token: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,6 +327,7 @@ function CreateTokenModal({
       const result = await api.createToken({
         name: formData.name,
         expires_at: formData.expires_at || undefined,
+        custom_token: formData.custom_token || undefined,
       });
       onSuccess(result.token);
     } catch (err) {
@@ -264,14 +344,17 @@ function CreateTokenModal({
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              Token 创建成功
+              Token 详情
             </h3>
           </div>
 
           <div className="px-6 py-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-green-800 mb-2">
-                ✓ Token 已创建！请复制保存，关闭后将无法再次查看完整 Token。
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-blue-800 mb-2">
+                ✅ Token 创建成功！请立即复制保存到安全的地方。
+              </p>
+              <p className="text-sm text-blue-700 mt-1">
+                💡 提示：您可以随时在 Token 列表中点击"眼睛"图标查看完整 Token。
               </p>
             </div>
 
@@ -348,6 +431,39 @@ function CreateTokenModal({
               留空则永不过期
             </p>
           </div>
+
+          {/* 高级模式切换 */}
+          <div className="pt-2 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
+            >
+              {showAdvanced ? '▼' : '▶'} 高级选项
+            </button>
+          </div>
+
+          {/* 自定义 Token 字段（高级模式） */}
+          {showAdvanced && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                自定义 Token 值 (可选)
+              </label>
+              <input
+                type="text"
+                value={formData.custom_token}
+                onChange={(e) => setFormData({ ...formData, custom_token: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                placeholder="sk-your-custom-token-here"
+              />
+              <p className="mt-2 text-xs text-yellow-800">
+                ⚠️ <strong>高级功能：</strong>自定义 Token 必须以 "sk-" 开头，长度至少 8 个字符。留空则自动生成随机 Token。
+              </p>
+              <p className="mt-1 text-xs text-yellow-800">
+                示例: sk-123456、sk-my-custom-key-2024
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 pt-4">
             <button

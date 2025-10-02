@@ -18,6 +18,8 @@ var (
 	ErrTokenDisabled = errors.New("token disabled")
 	// ErrInvalidExpiresAt 过期时间必须是未来时间
 	ErrInvalidExpiresAt = errors.New("expires_at must be in the future")
+	// ErrInvalidCustomToken 自定义 Token 格式无效
+	ErrInvalidCustomToken = errors.New("custom token must start with 'sk-' and be at least 8 characters")
 )
 
 // Service Token 业务逻辑层
@@ -41,35 +43,66 @@ func GenerateTokenValue() (string, error) {
 	return token, nil
 }
 
+// ValidateCustomToken 验证自定义 Token 格式
+func ValidateCustomToken(token string) error {
+	if len(token) < 8 {
+		return ErrInvalidCustomToken
+	}
+	if token[:3] != "sk-" {
+		return ErrInvalidCustomToken
+	}
+	return nil
+}
+
 // CreateToken 创建 Token
-func (s *Service) CreateToken(name string, expiresAt *time.Time) (*models.Token, error) {
+func (s *Service) CreateToken(name string, expiresAt *time.Time, customToken string) (*models.Token, error) {
 	// 验证过期时间
 	if expiresAt != nil && expiresAt.Before(time.Now()) {
 		return nil, ErrInvalidExpiresAt
 	}
 
-	// 生成唯一 Token 值
 	var tokenValue string
 	var err error
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
-		tokenValue, err = GenerateTokenValue()
-		if err != nil {
+
+	// 如果提供了自定义 Token
+	if customToken != "" {
+		// 验证自定义 Token 格式
+		if err := ValidateCustomToken(customToken); err != nil {
 			return nil, err
 		}
 
-		// 检查是否已存在
-		exists, err := s.repo.CheckValueExists(tokenValue)
+		// 检查自定义 Token 是否已存在
+		exists, err := s.repo.CheckValueExists(customToken)
 		if err != nil {
 			return nil, err
 		}
-		if !exists {
-			break
-		}
-
-		// 如果重试次数用完，返回错误
-		if i == maxRetries-1 {
+		if exists {
 			return nil, ErrTokenValueExists
+		}
+
+		tokenValue = customToken
+	} else {
+		// 生成唯一 Token 值
+		maxRetries := 5
+		for i := 0; i < maxRetries; i++ {
+			tokenValue, err = GenerateTokenValue()
+			if err != nil {
+				return nil, err
+			}
+
+			// 检查是否已存在
+			exists, err := s.repo.CheckValueExists(tokenValue)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				break
+			}
+
+			// 如果重试次数用完，返回错误
+			if i == maxRetries-1 {
+				return nil, ErrTokenValueExists
+			}
 		}
 	}
 
