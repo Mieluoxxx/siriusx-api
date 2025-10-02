@@ -216,6 +216,8 @@ func (h *ModelHandler) getErrorStatus(err error) int {
 	case errors.Is(err, mapping.ErrInvalidModelName),
 		errors.Is(err, mapping.ErrModelNameEmpty),
 		errors.Is(err, mapping.ErrModelNameTooLong),
+		errors.Is(err, mapping.ErrDisplayNameEmpty),
+		errors.Is(err, mapping.ErrDisplayNameTooLong),
 		errors.Is(err, mapping.ErrDescriptionTooLong):
 		return http.StatusBadRequest
 	default:

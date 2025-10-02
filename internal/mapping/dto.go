@@ -9,12 +9,14 @@ import (
 // CreateModelRequest 创建统一模型请求
 type CreateModelRequest struct {
 	Name        string `json:"name" binding:"required,max=100"`
+	DisplayName string `json:"display_name" binding:"required,max=200"`
 	Description string `json:"description" binding:"max=500"`
 }
 
 // UpdateModelRequest 更新统一模型请求
 type UpdateModelRequest struct {
 	Name        *string `json:"name" binding:"omitempty,max=100"`
+	DisplayName *string `json:"display_name" binding:"omitempty,max=200"`
 	Description *string `json:"description" binding:"omitempty,max=500"`
 }
 
@@ -22,6 +24,7 @@ type UpdateModelRequest struct {
 type ModelResponse struct {
 	ID          uint      `json:"id"`
 	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
 	Description string    `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -53,6 +56,7 @@ func ToModelResponse(model *models.UnifiedModel) *ModelResponse {
 	return &ModelResponse{
 		ID:          model.ID,
 		Name:        model.Name,
+		DisplayName: model.DisplayName,
 		Description: model.Description,
 		CreatedAt:   model.CreatedAt,
 		UpdatedAt:   model.UpdatedAt,

@@ -34,7 +34,7 @@ func NewRepository(db *gorm.DB) *Repository {
 // Create 创建统一模型
 func (r *Repository) Create(model *models.UnifiedModel) error {
 	// 使用 Select 明确指定要保存的字段
-	return r.db.Select("Name", "Description").Create(model).Error
+	return r.db.Select("Name", "DisplayName", "Description").Create(model).Error
 }
 
 // FindByID 根据 ID 查找模型

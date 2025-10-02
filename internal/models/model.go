@@ -7,6 +7,7 @@ import "time"
 type UnifiedModel struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	Name        string    `gorm:"type:varchar(100);uniqueIndex;not null" json:"name"`
+	DisplayName string    `gorm:"type:varchar(200);not null;default:''" json:"display_name"`
 	Description string    `gorm:"type:text" json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`

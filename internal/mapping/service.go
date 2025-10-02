@@ -16,6 +16,10 @@ var (
 	ErrModelNameEmpty = errors.New("模型名称不能为空")
 	// ErrModelNameTooLong 模型名称过长
 	ErrModelNameTooLong = errors.New("模型名称不能超过100个字符")
+	// ErrDisplayNameEmpty 显示名称为空
+	ErrDisplayNameEmpty = errors.New("显示名称不能为空")
+	// ErrDisplayNameTooLong 显示名称过长
+	ErrDisplayNameTooLong = errors.New("显示名称不能超过200个字符")
 	// ErrDescriptionTooLong 描述过长
 	ErrDescriptionTooLong = errors.New("描述不能超过500个字符")
 
@@ -50,6 +54,10 @@ func (s *Service) CreateModel(req CreateModelRequest) (*ModelResponse, error) {
 		return nil, err
 	}
 
+	if err := s.validateDisplayName(req.DisplayName); err != nil {
+		return nil, err
+	}
+
 	if err := s.validateDescription(req.Description); err != nil {
 		return nil, err
 	}
@@ -66,6 +74,7 @@ func (s *Service) CreateModel(req CreateModelRequest) (*ModelResponse, error) {
 	// 创建模型实体
 	model := &models.UnifiedModel{
 		Name:        strings.TrimSpace(req.Name),
+		DisplayName: strings.TrimSpace(req.DisplayName),
 		Description: strings.TrimSpace(req.Description),
 	}
 
@@ -157,6 +166,17 @@ func (s *Service) UpdateModel(id uint, req UpdateModelRequest) (*ModelResponse, 
 		}
 	}
 
+	if req.DisplayName != nil {
+		newDisplayName := strings.TrimSpace(*req.DisplayName)
+		if err := s.validateDisplayName(newDisplayName); err != nil {
+			return nil, err
+		}
+		if newDisplayName != model.DisplayName {
+			model.DisplayName = newDisplayName
+			updated = true
+		}
+	}
+
 	if req.Description != nil {
 		newDesc := strings.TrimSpace(*req.Description)
 		if err := s.validateDescription(newDesc); err != nil {
@@ -204,6 +224,21 @@ func (s *Service) validateModelName(name string) error {
 
 	if !ModelNamePattern.MatchString(name) {
 		return ErrInvalidModelName
+	}
+
+	return nil
+}
+
+// validateDisplayName 验证显示名称
+func (s *Service) validateDisplayName(displayName string) error {
+	displayName = strings.TrimSpace(displayName)
+
+	if displayName == "" {
+		return ErrDisplayNameEmpty
+	}
+
+	if len(displayName) > 200 {
+		return ErrDisplayNameTooLong
 	}
 
 	return nil
@@ -417,4 +452,14 @@ func (s *Service) validateMappingRequest(req CreateMappingRequest) error {
 	}
 
 	return nil
+}
+
+// GetModelByName 根据名称获取统一模型
+func (s *Service) GetModelByName(name string) (*models.UnifiedModel, error) {
+	return s.repo.FindByName(name)
+}
+
+// GetMappingsByModelID 获取模型的所有映射
+func (s *Service) GetMappingsByModelID(modelID uint) ([]*models.ModelMapping, error) {
+	return s.repo.FindMappingsByModelIDWithAll(modelID, true)
 }
