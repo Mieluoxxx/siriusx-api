@@ -46,6 +46,12 @@ func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 		})
 	})
 
+	// OpenAI 兼容的 API 路由
+	v1Group := router.Group("/v1")
+	{
+		setupProxyRoutes(v1Group, db, encryptionKey)
+	}
+
 	// API 路由组
 	apiGroup := router.Group("/api")
 	{
@@ -63,6 +69,38 @@ func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 	}
 
 	return router
+}
+
+// setupProxyRoutes 配置代理路由
+func setupProxyRoutes(group *gin.RouterGroup, db *gorm.DB, encryptionKey []byte) {
+	// 创建依赖
+	providerRepo := provider.NewRepository(db)
+	var providerService *provider.Service
+	if len(encryptionKey) > 0 {
+		providerService = provider.NewServiceWithEncryption(providerRepo, encryptionKey)
+	} else {
+		providerService = provider.NewService(providerRepo)
+	}
+
+	mappingRepo := mapping.NewRepository(db)
+	mappingService := mapping.NewService(mappingRepo)
+
+	tokenRepo := token.NewRepository(db)
+	tokenService := token.NewService(tokenRepo)
+
+	// 创建代理处理器
+	proxyHandler := handlers.NewProxyHandler(providerService, mappingService)
+
+	// 注册路由（需要 Token 验证）
+	group.POST("/chat/completions",
+		middleware.TokenAuthMiddleware(tokenService),
+		proxyHandler.ChatCompletions,
+	)
+
+	group.POST("/messages",
+		middleware.TokenAuthMiddleware(tokenService),
+		proxyHandler.Messages,
+	)
 }
 
 // setupProviderRoutes 配置供应商路由
@@ -94,6 +132,9 @@ func setupProviderRoutes(group *gin.RouterGroup, db *gorm.DB, encryptionKey []by
 
 		// 启用/禁用供应商
 		providers.PATCH("/:id/enabled", handler.ToggleProviderEnabled)
+
+		// 获取供应商可用模型
+		providers.GET("/:id/models", handler.GetAvailableModels)
 	}
 }
 
