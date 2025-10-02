@@ -1,10 +1,16 @@
 package api
 
 import (
+	"time"
+
 	"github.com/Mieluoxxx/Siriusx-API/internal/api/handlers"
+	"github.com/Mieluoxxx/Siriusx-API/internal/api/middleware"
+	"github.com/Mieluoxxx/Siriusx-API/internal/events"
 	"github.com/Mieluoxxx/Siriusx-API/internal/mapping"
 	"github.com/Mieluoxxx/Siriusx-API/internal/provider"
+	"github.com/Mieluoxxx/Siriusx-API/internal/stats"
 	"github.com/Mieluoxxx/Siriusx-API/internal/token"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -13,6 +19,24 @@ import (
 func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 	// 创建 Gin 引擎
 	router := gin.Default()
+
+	// 创建请求计数器（60秒滑动窗口）
+	requestCounter := stats.NewRequestCounter(60 * time.Second)
+
+	// 创建事件服务
+	eventService := events.NewService(db)
+
+	// 配置 CORS 中间件
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:4321", "http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
+
+	// 添加请求计数中间件
+	router.Use(middleware.RequestCounterMiddleware(requestCounter))
 
 	// 健康检查端点
 	router.GET("/health", func(c *gin.Context) {
@@ -33,6 +57,9 @@ func SetupRouter(db *gorm.DB, encryptionKey []byte) *gin.Engine {
 
 		// Token API
 		setupTokenRoutes(apiGroup, db)
+
+		// 统计信息 API
+		setupStatsRoutes(apiGroup, db, requestCounter, eventService)
 	}
 
 	return router
@@ -61,6 +88,12 @@ func setupProviderRoutes(group *gin.RouterGroup, db *gorm.DB, encryptionKey []by
 		providers.GET("/:id", handler.GetProvider)
 		providers.PUT("/:id", handler.UpdateProvider)
 		providers.DELETE("/:id", handler.DeleteProvider)
+
+		// 供应商健康检查
+		providers.POST("/:id/health-check", handler.HealthCheckProvider)
+
+		// 启用/禁用供应商
+		providers.PATCH("/:id/enabled", handler.ToggleProviderEnabled)
 	}
 }
 
@@ -109,4 +142,13 @@ func setupTokenRoutes(group *gin.RouterGroup, db *gorm.DB) {
 		tokens.GET("", handler.ListTokens)
 		tokens.DELETE("/:id", handler.DeleteToken)
 	}
+}
+
+// setupStatsRoutes 配置统计信息路由
+func setupStatsRoutes(group *gin.RouterGroup, db *gorm.DB, requestCounter *stats.RequestCounter, eventService *events.Service) {
+	// 创建依赖
+	handler := handlers.NewStatsHandler(db, requestCounter, eventService)
+
+	// 注册路由
+	group.GET("/stats", handler.GetStats)
 }

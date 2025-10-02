@@ -60,6 +60,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.UnifiedModel{},
 		&models.ModelMapping{},
 		&models.Token{},
+		&models.SystemEvent{},
 	)
 
 	if err != nil {
@@ -71,6 +72,7 @@ func AutoMigrate(db *gorm.DB) error {
 	log.Println("   - unified_models 表")
 	log.Println("   - model_mappings 表")
 	log.Println("   - tokens 表")
+	log.Println("   - system_events 表")
 
 	return nil
 }

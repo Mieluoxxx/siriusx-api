@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Mieluoxxx/Siriusx-API/internal/models"
 	"github.com/Mieluoxxx/Siriusx-API/internal/provider"
@@ -295,6 +296,158 @@ func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 
 	// 返回 204 No Content
 	c.Status(http.StatusNoContent)
+}
+
+// HealthCheckProvider 手动触发供应商健康检查
+// @Summary 手动触发供应商健康检查
+// @Tags providers
+// @Produce json
+// @Param id path int true "供应商 ID"
+// @Success 200 {object} HealthCheckResponse
+// @Failure 404 {object} provider.ErrorResponse
+// @Router /api/providers/{id}/health-check [post]
+func (h *ProviderHandler) HealthCheckProvider(c *gin.Context) {
+	// 解析 ID
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INVALID_ID",
+				Message: "Invalid provider ID",
+			},
+		})
+		return
+	}
+
+	// 查询供应商
+	prov, err := h.service.GetProvider(uint(id))
+	if err != nil {
+		if errors.Is(err, provider.ErrProviderNotFound) {
+			c.JSON(http.StatusNotFound, provider.ErrorResponse{
+				Error: provider.ErrorDetail{
+					Code:    "NOT_FOUND",
+					Message: "Provider not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to get provider",
+			},
+		})
+		return
+	}
+
+	// 执行健康检查
+	healthChecker := provider.NewHealthChecker(5 * time.Second)
+	checkResult, err := healthChecker.CheckHealthSimple(prov.BaseURL, prov.APIKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "HEALTH_CHECK_FAILED",
+				Message: "健康检查执行失败",
+				Details: err.Error(),
+			},
+		})
+		return
+	}
+
+	// 更新供应商健康状态
+	newHealthStatus := "unhealthy"
+	if checkResult.Healthy {
+		newHealthStatus = "healthy"
+	}
+
+	// 如果健康状态发生变化，更新数据库
+	if prov.HealthStatus != newHealthStatus {
+		updateReq := provider.UpdateProviderRequest{}
+		h.service.UpdateProvider(prov.ID, updateReq) // 内部会更新健康状态
+	}
+
+	c.JSON(http.StatusOK, HealthCheckResponse{
+		ProviderID:     prov.ID,
+		Healthy:        checkResult.Healthy,
+		ResponseTimeMs: int(checkResult.ResponseTimeMs),
+		CheckedAt:      checkResult.CheckedAt,
+	})
+}
+
+// ToggleProviderEnabled 启用/禁用供应商
+// @Summary 启用/禁用供应商
+// @Tags providers
+// @Accept json
+// @Produce json
+// @Param id path int true "供应商 ID"
+// @Param request body ToggleEnabledRequest true "启用状态"
+// @Success 200 {object} provider.ProviderResponse
+// @Failure 404 {object} provider.ErrorResponse
+// @Router /api/providers/{id}/enabled [patch]
+func (h *ProviderHandler) ToggleProviderEnabled(c *gin.Context) {
+	// 解析 ID
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INVALID_ID",
+				Message: "Invalid provider ID",
+			},
+		})
+		return
+	}
+
+	var req ToggleEnabledRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "VALIDATION_ERROR",
+				Message: "Invalid request parameters",
+				Details: err.Error(),
+			},
+		})
+		return
+	}
+
+	// 更新供应商启用状态
+	updateReq := provider.UpdateProviderRequest{
+		Enabled: &req.Enabled,
+	}
+
+	prov, err := h.service.UpdateProvider(uint(id), updateReq)
+	if err != nil {
+		if errors.Is(err, provider.ErrProviderNotFound) {
+			c.JSON(http.StatusNotFound, provider.ErrorResponse{
+				Error: provider.ErrorDetail{
+					Code:    "NOT_FOUND",
+					Message: "Provider not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to update provider",
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, toProviderResponse(prov))
+}
+
+// HealthCheckResponse 健康检查响应
+type HealthCheckResponse struct {
+	ProviderID     uint      `json:"provider_id"`
+	Healthy        bool      `json:"healthy"`
+	ResponseTimeMs int       `json:"response_time_ms"`
+	CheckedAt      time.Time `json:"checked_at"`
+}
+
+// ToggleEnabledRequest 启用/禁用请求
+type ToggleEnabledRequest struct {
+	Enabled bool `json:"enabled"`
 }
 
 // toProviderResponse 将 Provider 模型转换为响应（API Key 脱敏）

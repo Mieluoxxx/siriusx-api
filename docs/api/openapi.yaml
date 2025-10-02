@@ -1,0 +1,842 @@
+openapi: 3.0.3
+info:
+  title: Siriusx-API
+  description: |
+    Siriusx-API 是一个智能 API 网关，用于聚合多个 Claude 供应商，提供统一的 OpenAI 兼容接口。
+
+    ## 主要功能
+    - 🔄 格式转换：Claude ↔ OpenAI 格式互转
+    - 🏢 供应商管理：多供应商配置和负载均衡
+    - 🎯 模型映射：统一模型到多供应商映射
+    - 🔐 Token 管理：API 令牌生成和验证
+    - 📊 监控统计：系统状态和请求统计
+
+  version: 1.0.0
+  contact:
+    name: Siriusx-API Team
+    url: https://github.com/Mieluoxxx/Siriusx-API
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+  - url: https://api.siriusx.com
+    description: 生产环境
+
+tags:
+  - name: Health
+    description: 健康检查
+  - name: Providers
+    description: 供应商管理
+  - name: Models
+    description: 统一模型管理
+  - name: Mappings
+    description: 模型映射管理
+  - name: Tokens
+    description: API Token 管理
+  - name: Stats
+    description: 统计信息
+
+paths:
+  /health:
+    get:
+      summary: 健康检查
+      description: 检查 API 服务是否正常运行
+      tags:
+        - Health
+      responses:
+        '200':
+          description: 服务正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: Siriusx-API
+
+  /api/stats:
+    get:
+      summary: 获取系统统计信息
+      description: 获取系统概览统计数据，包括供应商状态、请求统计、QPS 等
+      tags:
+        - Stats
+      responses:
+        '200':
+          description: 成功返回统计信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStats'
+
+  /api/providers:
+    get:
+      summary: 获取供应商列表
+      description: 获取所有供应商的列表
+      tags:
+        - Providers
+      responses:
+        '200':
+          description: 成功返回供应商列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Provider'
+
+    post:
+      summary: 创建供应商
+      description: 添加新的 Claude API 供应商
+      tags:
+        - Providers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProviderRequest'
+      responses:
+        '201':
+          description: 成功创建供应商
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/providers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProviderId'
+
+    get:
+      summary: 获取单个供应商
+      description: 根据 ID 获取供应商详细信息
+      tags:
+        - Providers
+      responses:
+        '200':
+          description: 成功返回供应商信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: 更新供应商
+      description: 更新供应商的配置信息
+      tags:
+        - Providers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProviderRequest'
+      responses:
+        '200':
+          description: 成功更新供应商
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 删除供应商
+      description: 删除指定的供应商
+      tags:
+        - Providers
+      responses:
+        '204':
+          description: 成功删除供应商
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/providers/{id}/health-check:
+    parameters:
+      - $ref: '#/components/parameters/ProviderId'
+
+    post:
+      summary: 手动触发健康检查
+      description: 立即对指定供应商执行健康检查
+      tags:
+        - Providers
+      responses:
+        '200':
+          description: 健康检查完成
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider_id:
+                    type: integer
+                    example: 1
+                  healthy:
+                    type: boolean
+                    example: true
+                  response_time_ms:
+                    type: integer
+                    description: 响应时间（毫秒）
+                    example: 150
+                  checked_at:
+                    type: string
+                    format: date-time
+                    example: "2025-10-02T18:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/providers/{id}/enabled:
+    parameters:
+      - $ref: '#/components/parameters/ProviderId'
+
+    patch:
+      summary: 启用/禁用供应商
+      description: 切换供应商的启用状态
+      tags:
+        - Providers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: true 为启用，false 为禁用
+                  example: true
+      responses:
+        '200':
+          description: 成功更新状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provider'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/models:
+    get:
+      summary: 获取统一模型列表
+      description: 获取所有统一模型的列表
+      tags:
+        - Models
+      responses:
+        '200':
+          description: 成功返回模型列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UnifiedModel'
+
+    post:
+      summary: 创建统一模型
+      description: 创建新的统一模型
+      tags:
+        - Models
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateModelRequest'
+      responses:
+        '201':
+          description: 成功创建模型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnifiedModel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/models/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ModelId'
+
+    get:
+      summary: 获取单个模型
+      description: 根据 ID 获取模型详细信息
+      tags:
+        - Models
+      responses:
+        '200':
+          description: 成功返回模型信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnifiedModel'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: 更新模型
+      description: 更新模型的配置信息
+      tags:
+        - Models
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateModelRequest'
+      responses:
+        '200':
+          description: 成功更新模型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnifiedModel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 删除模型
+      description: 删除指定的统一模型
+      tags:
+        - Models
+      responses:
+        '204':
+          description: 成功删除模型
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/models/{id}/mappings:
+    parameters:
+      - $ref: '#/components/parameters/ModelId'
+
+    get:
+      summary: 获取模型的映射列表
+      description: 获取指定模型的所有供应商映射
+      tags:
+        - Mappings
+      responses:
+        '200':
+          description: 成功返回映射列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelMapping'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: 为模型添加映射
+      description: 为统一模型添加供应商映射配置
+      tags:
+        - Mappings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMappingRequest'
+      responses:
+        '201':
+          description: 成功创建映射
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMapping'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/mappings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MappingId'
+
+    get:
+      summary: 获取单个映射
+      description: 根据 ID 获取映射详细信息
+      tags:
+        - Mappings
+      responses:
+        '200':
+          description: 成功返回映射信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMapping'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: 更新映射
+      description: 更新映射的配置（权重、优先级等）
+      tags:
+        - Mappings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMappingRequest'
+      responses:
+        '200':
+          description: 成功更新映射
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMapping'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 删除映射
+      description: 删除指定的模型映射
+      tags:
+        - Mappings
+      responses:
+        '204':
+          description: 成功删除映射
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tokens:
+    get:
+      summary: 获取 Token 列表
+      description: 获取所有 API Token 的列表（Token 已脱敏）
+      tags:
+        - Tokens
+      responses:
+        '200':
+          description: 成功返回 Token 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+
+    post:
+      summary: 创建 Token
+      description: 生成新的 API Token
+      tags:
+        - Tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+      responses:
+        '201':
+          description: 成功创建 Token（仅此次返回完整 Token）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenWithSecret'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/tokens/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TokenId'
+
+    delete:
+      summary: 删除 Token
+      description: 删除指定的 API Token
+      tags:
+        - Tokens
+      responses:
+        '204':
+          description: 成功删除 Token
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    ProviderId:
+      name: id
+      in: path
+      required: true
+      description: 供应商 ID
+      schema:
+        type: integer
+        example: 1
+
+    ModelId:
+      name: id
+      in: path
+      required: true
+      description: 统一模型 ID
+      schema:
+        type: integer
+        example: 1
+
+    MappingId:
+      name: id
+      in: path
+      required: true
+      description: 映射 ID
+      schema:
+        type: integer
+        example: 1
+
+    TokenId:
+      name: id
+      in: path
+      required: true
+      description: Token ID
+      schema:
+        type: integer
+        example: 1
+
+  schemas:
+    SystemStats:
+      type: object
+      properties:
+        providers:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: 总供应商数
+              example: 5
+            healthy:
+              type: integer
+              description: 健康供应商数
+              example: 4
+            unhealthy:
+              type: integer
+              description: 不健康供应商数
+              example: 1
+        requests:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: 总请求数
+              example: 10523
+            current_qps:
+              type: number
+              format: float
+              description: 当前 QPS
+              example: 12.5
+        recent_events:
+          type: array
+          description: 最近事件日志（最多 10 条）
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+                example: "2025-10-02T18:00:00Z"
+              type:
+                type: string
+                enum: [failover, config_change, health_check]
+                example: failover
+              message:
+                type: string
+                example: "供应商 OneAPI 故障，切换到 ClaudeAPI"
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "OneAPI Provider"
+        base_url:
+          type: string
+          format: uri
+          example: "https://api.oneapi.com"
+        api_key:
+          type: string
+          description: API Key (脱敏显示)
+          example: "sk-****5678"
+        priority:
+          type: integer
+          description: 优先级（数字越大优先级越高）
+          example: 80
+        enabled:
+          type: boolean
+          description: 是否启用
+          example: true
+        healthy:
+          type: boolean
+          description: 健康状态
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateProviderRequest:
+      type: object
+      required:
+        - name
+        - base_url
+        - api_key
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "OneAPI Provider"
+        base_url:
+          type: string
+          format: uri
+          example: "https://api.oneapi.com"
+        api_key:
+          type: string
+          example: "sk-abc123def456"
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 50
+          example: 80
+
+    UpdateProviderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        base_url:
+          type: string
+          format: uri
+        api_key:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    UnifiedModel:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "claude-3-5-sonnet-latest"
+        display_name:
+          type: string
+          example: "Claude 3.5 Sonnet (Latest)"
+        description:
+          type: string
+          example: "最新版本的 Claude 3.5 Sonnet"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateModelRequest:
+      type: object
+      required:
+        - name
+        - display_name
+      properties:
+        name:
+          type: string
+          example: "claude-3-5-sonnet-latest"
+        display_name:
+          type: string
+          example: "Claude 3.5 Sonnet (Latest)"
+        description:
+          type: string
+          example: "最新版本的 Claude 3.5 Sonnet"
+
+    UpdateModelRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        description:
+          type: string
+
+    ModelMapping:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        unified_model_id:
+          type: integer
+          example: 1
+        provider_id:
+          type: integer
+          example: 1
+        provider_model_name:
+          type: string
+          example: "claude-3-5-sonnet-20241022"
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: 负载均衡权重
+          example: 70
+        priority:
+          type: integer
+          description: 优先级（数字越小优先级越高）
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateMappingRequest:
+      type: object
+      required:
+        - provider_id
+        - provider_model_name
+      properties:
+        provider_id:
+          type: integer
+          example: 1
+        provider_model_name:
+          type: string
+          example: "claude-3-5-sonnet-20241022"
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          example: 70
+        priority:
+          type: integer
+          default: 1
+          example: 1
+
+    UpdateMappingRequest:
+      type: object
+      properties:
+        provider_model_name:
+          type: string
+        weight:
+          type: integer
+          minimum: 1
+          maximum: 100
+        priority:
+          type: integer
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Development Token"
+        token_display:
+          type: string
+          description: Token 脱敏显示
+          example: "sk-****uMU="
+        enabled:
+          type: boolean
+          example: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TokenWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/Token'
+        - type: object
+          properties:
+            token:
+              type: string
+              description: 完整的 Token（仅在创建时返回一次）
+              example: "sk-soj6C7X3f3uZCkUSN27I9qSb6UjM61nxXeHeBKAquMU="
+
+    CreateTokenRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: "Development Token"
+        expires_at:
+          type: string
+          format: date-time
+          description: 过期时间（可选，不设置则永不过期）
+          example: "2025-12-31T23:59:59Z"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid request parameters"
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "Resource not found"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        使用 API Token 进行认证。Token 格式为 `sk-` 开头的 Base64 编码字符串。
+
+        示例：`Authorization: Bearer sk-soj6C7X3f3uZCkUSN27I9qSb6UjM61nxXeHeBKAquMU=`
+
+security:
+  - BearerAuth: []
