@@ -1,9 +1,12 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -16,7 +19,7 @@ type HealthChecker struct {
 // NewHealthChecker 创建健康检查器
 func NewHealthChecker(timeout time.Duration) *HealthChecker {
 	if timeout == 0 {
-		timeout = 5 * time.Second // 默认 5 秒超时
+		timeout = 15 * time.Second // 默认 15 秒超时
 	}
 
 	return &HealthChecker{
@@ -37,26 +40,45 @@ type HealthCheckResult struct {
 }
 
 // CheckHealth 执行健康检查
-// 通过调用供应商的健康端点或测试端点来验证可用性
-func (hc *HealthChecker) CheckHealth(ctx context.Context, baseURL, apiKey string) (*HealthCheckResult, error) {
+// 通过发送一个简单的聊天请求来测试指定模型是否可用
+// 使用 OpenAI 兼容的 API 格式
+func (hc *HealthChecker) CheckHealth(ctx context.Context, baseURL, apiKey, testModel string) (*HealthCheckResult, error) {
 	startTime := time.Now()
 	result := &HealthCheckResult{
 		CheckedAt: startTime,
 	}
 
-	// 构建健康检查请求
-	// 对于 Claude API，我们可以尝试调用 /v1/models 端点来验证
-	checkURL := baseURL + "/v1/models"
+	// 构建 OpenAI 兼容的聊天完成请求
+	// 标准化 baseURL，移除末尾斜杠以避免双斜杠问题
+	checkURL := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+	// 构建请求体
+	requestBody := map[string]interface{}{
+		"model": testModel,
+		"messages": []map[string]string{
+			{
+				"role":    "user",
+				"content": "Hi",
+			},
+		},
+		"max_tokens": 1,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		result.Error = fmt.Sprintf("构建请求失败: %v", err)
+		return result, nil
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", checkURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		result.Error = fmt.Sprintf("创建请求失败: %v", err)
 		return result, nil
 	}
 
-	// 添加认证头
-	req.Header.Set("x-api-key", apiKey)
-	req.Header.Set("anthropic-version", "2023-06-01")
+	// 设置 OpenAI 兼容的认证头
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Siriusx-API/1.0")
 
 	// 执行请求
@@ -84,9 +106,9 @@ func (hc *HealthChecker) CheckHealth(ctx context.Context, baseURL, apiKey string
 }
 
 // CheckHealthSimple 简化的健康检查（不需要 context）
-func (hc *HealthChecker) CheckHealthSimple(baseURL, apiKey string) (*HealthCheckResult, error) {
+func (hc *HealthChecker) CheckHealthSimple(baseURL, apiKey, testModel string) (*HealthCheckResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 
-	return hc.CheckHealth(ctx, baseURL, apiKey)
+	return hc.CheckHealth(ctx, baseURL, apiKey, testModel)
 }

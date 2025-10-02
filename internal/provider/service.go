@@ -60,7 +60,7 @@ func (s *Service) CreateProvider(req CreateProviderRequest) (*models.Provider, e
 		Name:         req.Name,
 		BaseURL:      req.BaseURL,
 		APIKey:       req.APIKey, // 将在保存前加密
-		Priority:     50,
+		TestModel:    req.TestModel,
 		HealthStatus: "unknown",
 	}
 
@@ -69,11 +69,6 @@ func (s *Service) CreateProvider(req CreateProviderRequest) (*models.Provider, e
 		provider.Enabled = *req.Enabled
 	} else {
 		provider.Enabled = true
-	}
-
-	// 应用 Priority（默认值 50）
-	if req.Priority != nil {
-		provider.Priority = *req.Priority
 	}
 
 	// 加密 API Key（如果配置了加密密钥）
@@ -168,6 +163,10 @@ func (s *Service) UpdateProvider(id uint, req UpdateProviderRequest) (*models.Pr
 		provider.BaseURL = *req.BaseURL
 	}
 
+	if req.TestModel != nil {
+		provider.TestModel = *req.TestModel
+	}
+
 	var plaintextKey string // 保存明文用于返回
 	if req.APIKey != nil {
 		plaintextKey = *req.APIKey
@@ -185,9 +184,6 @@ func (s *Service) UpdateProvider(id uint, req UpdateProviderRequest) (*models.Pr
 
 	if req.Enabled != nil {
 		provider.Enabled = *req.Enabled
-	}
-	if req.Priority != nil {
-		provider.Priority = *req.Priority
 	}
 
 	// 保存到数据库
@@ -237,11 +233,9 @@ func (s *Service) validateCreateRequest(req CreateProviderRequest) error {
 		return fmt.Errorf("%w: api_key is required", ErrInvalidInput)
 	}
 
-	// Priority 范围验证
-	if req.Priority != nil {
-		if *req.Priority < 1 || *req.Priority > 100 {
-			return fmt.Errorf("%w: priority must be between 1 and 100", ErrInvalidInput)
-		}
+	// TestModel 不能为空
+	if strings.TrimSpace(req.TestModel) == "" {
+		return fmt.Errorf("%w: test_model is required", ErrInvalidInput)
 	}
 
 	return nil
@@ -266,11 +260,9 @@ func (s *Service) validateUpdateRequest(req UpdateProviderRequest) error {
 		return fmt.Errorf("%w: api_key cannot be empty", ErrInvalidInput)
 	}
 
-	// Priority 范围验证
-	if req.Priority != nil {
-		if *req.Priority < 1 || *req.Priority > 100 {
-			return fmt.Errorf("%w: priority must be between 1 and 100", ErrInvalidInput)
-		}
+	// TestModel 验证
+	if req.TestModel != nil && strings.TrimSpace(*req.TestModel) == "" {
+		return fmt.Errorf("%w: test_model cannot be empty", ErrInvalidInput)
 	}
 
 	return nil
@@ -291,6 +283,21 @@ func (s *Service) validateURL(urlStr string) error {
 	// 必须有 host
 	if parsedURL.Host == "" {
 		return fmt.Errorf("%w: URL must have a host", ErrInvalidURL)
+	}
+
+	// URL 不应以 / 结尾
+	if strings.HasSuffix(urlStr, "/") {
+		return fmt.Errorf("%w: base_url should not end with /", ErrInvalidURL)
+	}
+
+	// URL 不应包含 /v1 等 API 路径
+	if strings.Contains(parsedURL.Path, "/v1") {
+		return fmt.Errorf("%w: base_url should not contain /v1 or other API paths", ErrInvalidURL)
+	}
+
+	// 如果有 path，应该为空或只包含域名后的路径前缀（不含 /v1）
+	if parsedURL.Path != "" && parsedURL.Path != "/" {
+		return fmt.Errorf("%w: base_url should only contain scheme and host (e.g., https://api.example.com)", ErrInvalidURL)
 	}
 
 	return nil

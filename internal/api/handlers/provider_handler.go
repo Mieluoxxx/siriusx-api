@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"math"
 	"net/http"
 	"strconv"
@@ -341,8 +342,12 @@ func (h *ProviderHandler) HealthCheckProvider(c *gin.Context) {
 	}
 
 	// 执行健康检查
-	healthChecker := provider.NewHealthChecker(5 * time.Second)
-	checkResult, err := healthChecker.CheckHealthSimple(prov.BaseURL, prov.APIKey)
+	healthChecker := provider.NewHealthChecker(15 * time.Second)
+
+	// 记录健康检查开始
+	c.Set("health_check_start", time.Now())
+
+	checkResult, err := healthChecker.CheckHealthSimple(prov.BaseURL, prov.APIKey, prov.TestModel)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
 			Error: provider.ErrorDetail{
@@ -354,10 +359,25 @@ func (h *ProviderHandler) HealthCheckProvider(c *gin.Context) {
 		return
 	}
 
+	// 记录健康检查完成
+	if startTime, exists := c.Get("health_check_start"); exists {
+		duration := time.Since(startTime.(time.Time))
+		c.Set("health_check_duration", duration)
+	}
+
 	// 更新供应商健康状态
 	newHealthStatus := "unhealthy"
 	if checkResult.Healthy {
 		newHealthStatus = "healthy"
+	}
+
+	// 记录健康检查结果（包括错误信息）
+	if !checkResult.Healthy {
+		log.Printf("健康检查失败 [Provider: %s (ID: %d)] StatusCode: %d, Error: %s, ResponseTime: %dms",
+			prov.Name, prov.ID, checkResult.StatusCode, checkResult.Error, checkResult.ResponseTimeMs)
+	} else {
+		log.Printf("健康检查成功 [Provider: %s (ID: %d)] ResponseTime: %dms",
+			prov.Name, prov.ID, checkResult.ResponseTimeMs)
 	}
 
 	// 如果健康状态发生变化，更新数据库
@@ -374,6 +394,8 @@ func (h *ProviderHandler) HealthCheckProvider(c *gin.Context) {
 		ProviderID:     prov.ID,
 		Healthy:        checkResult.Healthy,
 		ResponseTimeMs: int(checkResult.ResponseTimeMs),
+		StatusCode:     checkResult.StatusCode,
+		Error:          checkResult.Error,
 		CheckedAt:      checkResult.CheckedAt,
 	})
 }
@@ -446,6 +468,8 @@ type HealthCheckResponse struct {
 	ProviderID     uint      `json:"provider_id"`
 	Healthy        bool      `json:"healthy"`
 	ResponseTimeMs int       `json:"response_time_ms"`
+	StatusCode     int       `json:"status_code,omitempty"`
+	Error          string    `json:"error,omitempty"`
 	CheckedAt      time.Time `json:"checked_at"`
 }
 
@@ -461,10 +485,58 @@ func toProviderResponse(p *models.Provider) provider.ProviderResponse {
 		Name:         p.Name,
 		BaseURL:      p.BaseURL,
 		APIKey:       provider.MaskAPIKey(p.APIKey),
+		TestModel:    p.TestModel,
 		Enabled:      p.Enabled,
-		Priority:     p.Priority,
 		HealthStatus: p.HealthStatus,
 		CreatedAt:    p.CreatedAt,
 		UpdatedAt:    p.UpdatedAt,
 	}
+}
+
+// GetAvailableModels 获取供应商可用模型列表
+// @Summary 获取供应商可用模型
+// @Tags providers
+// @Produce json
+// @Param id path int true "供应商 ID"
+// @Success 200 {object} provider.AvailableModelsResponse
+// @Failure 400 {object} provider.ErrorResponse
+// @Failure 404 {object} provider.ErrorResponse
+// @Failure 500 {object} provider.ErrorResponse
+// @Router /api/providers/{id}/models [get]
+func (h *ProviderHandler) GetAvailableModels(c *gin.Context) {
+	// 解析 ID 参数
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INVALID_ID",
+				Message: "Invalid provider ID",
+			},
+		})
+		return
+	}
+
+	// 调用 Service 获取可用模型
+	result, err := h.service.GetAvailableModels(uint(id))
+	if err != nil {
+		if errors.Is(err, provider.ErrProviderNotFound) {
+			c.JSON(http.StatusNotFound, provider.ErrorResponse{
+				Error: provider.ErrorDetail{
+					Code:    "NOT_FOUND",
+					Message: "Provider not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "FETCH_FAILED",
+				Message: "Failed to fetch available models",
+				Details: err.Error(),
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }

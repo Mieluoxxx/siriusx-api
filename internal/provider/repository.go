@@ -27,7 +27,7 @@ func NewRepository(db *gorm.DB) *Repository {
 // Create 创建供应商
 func (r *Repository) Create(provider *models.Provider) error {
 	// 使用 Select 明确指定要保存的字段，包括零值字段
-	return r.db.Select("Name", "BaseURL", "APIKey", "Enabled", "Priority", "HealthStatus").Create(provider).Error
+	return r.db.Select("Name", "BaseURL", "APIKey", "TestModel", "Enabled", "HealthStatus").Create(provider).Error
 }
 
 // FindByID 根据 ID 查找供应商

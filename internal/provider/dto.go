@@ -8,20 +8,20 @@ import (
 
 // CreateProviderRequest 创建供应商请求
 type CreateProviderRequest struct {
-	Name     string `json:"name" binding:"required"`
-	BaseURL  string `json:"base_url" binding:"required,url"`
-	APIKey   string `json:"api_key" binding:"required"`
-	Enabled  *bool  `json:"enabled"`
-	Priority *int   `json:"priority" binding:"omitempty,min=1,max=100"`
+	Name      string `json:"name" binding:"required"`
+	BaseURL   string `json:"base_url" binding:"required,url"`
+	APIKey    string `json:"api_key" binding:"required"`
+	TestModel string `json:"test_model" binding:"required"`
+	Enabled   *bool  `json:"enabled"`
 }
 
 // UpdateProviderRequest 更新供应商请求
 type UpdateProviderRequest struct {
-	Name     *string `json:"name"`
-	BaseURL  *string `json:"base_url" binding:"omitempty,url"`
-	APIKey   *string `json:"api_key"`
-	Enabled  *bool   `json:"enabled"`
-	Priority *int    `json:"priority" binding:"omitempty,min=1,max=100"`
+	Name      *string `json:"name"`
+	BaseURL   *string `json:"base_url" binding:"omitempty,url"`
+	APIKey    *string `json:"api_key"`
+	TestModel *string `json:"test_model"`
+	Enabled   *bool   `json:"enabled"`
 }
 
 // ProviderResponse 供应商响应（API Key 脱敏）
@@ -30,8 +30,8 @@ type ProviderResponse struct {
 	Name         string    `json:"name"`
 	BaseURL      string    `json:"base_url"`
 	APIKey       string    `json:"api_key"` // 脱敏显示
+	TestModel    string    `json:"test_model"`
 	Enabled      bool      `json:"enabled"`
-	Priority     int       `json:"priority"`
 	HealthStatus string    `json:"health_status"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -85,8 +85,8 @@ func ToProviderResponse(provider *models.Provider, maskKey bool) *ProviderRespon
 		ID:           provider.ID,
 		Name:         provider.Name,
 		BaseURL:      provider.BaseURL,
+		TestModel:    provider.TestModel,
 		Enabled:      provider.Enabled,
-		Priority:     provider.Priority,
 		HealthStatus: provider.HealthStatus,
 		CreatedAt:    provider.CreatedAt,
 		UpdatedAt:    provider.UpdatedAt,
@@ -108,8 +108,8 @@ func ToProviderResponseWithDecryption(provider *models.Provider, decryptedKey st
 		ID:           provider.ID,
 		Name:         provider.Name,
 		BaseURL:      provider.BaseURL,
+		TestModel:    provider.TestModel,
 		Enabled:      provider.Enabled,
-		Priority:     provider.Priority,
 		HealthStatus: provider.HealthStatus,
 		CreatedAt:    provider.CreatedAt,
 		UpdatedAt:    provider.UpdatedAt,
