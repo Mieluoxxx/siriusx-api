@@ -362,8 +362,12 @@ func (h *ProviderHandler) HealthCheckProvider(c *gin.Context) {
 
 	// 如果健康状态发生变化，更新数据库
 	if prov.HealthStatus != newHealthStatus {
-		updateReq := provider.UpdateProviderRequest{}
-		h.service.UpdateProvider(prov.ID, updateReq) // 内部会更新健康状态
+		prov.HealthStatus = newHealthStatus
+		err := h.service.UpdateProviderHealthStatus(prov.ID, newHealthStatus)
+		if err != nil {
+			// 记录错误但不影响返回结果
+			c.Error(err)
+		}
 	}
 
 	c.JSON(http.StatusOK, HealthCheckResponse{

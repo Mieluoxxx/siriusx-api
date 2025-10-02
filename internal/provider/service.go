@@ -215,6 +215,11 @@ func (s *Service) DeleteProvider(id uint) error {
 	return s.repo.SoftDelete(id)
 }
 
+// UpdateProviderHealthStatus 更新供应商健康状态
+func (s *Service) UpdateProviderHealthStatus(id uint, healthStatus string) error {
+	return s.repo.UpdateHealthStatus(id, healthStatus)
+}
+
 // validateCreateRequest 验证创建请求
 func (s *Service) validateCreateRequest(req CreateProviderRequest) error {
 	// 名称不能为空
