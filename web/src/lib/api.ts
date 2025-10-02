@@ -22,8 +22,8 @@ export interface Provider {
   name: string;
   base_url: string;
   api_key: string;
+  test_model: string;
   enabled: boolean;
-  priority: number;
   health_status: string;
   created_at: string;
   updated_at: string;
@@ -38,6 +38,32 @@ export interface UnifiedModel {
   updated_at: string;
 }
 
+export interface ModelInfo {
+  id: string;
+  object: string;
+}
+
+export interface AvailableModelsResponse {
+  provider_id: number;
+  provider_name: string;
+  models: ModelInfo[];
+  total: number;
+  fetched_at: string;
+}
+
+export interface ModelMapping {
+  id: number;
+  unified_model_id: number;
+  provider_id: number;
+  provider_name?: string;
+  target_model: string;
+  weight: number;
+  priority: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Token {
   id: number;
   name: string;
@@ -46,6 +72,14 @@ export interface Token {
   expires_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface HealthCheckResult {
+  healthy: boolean;
+  response_time_ms: number;
+  status_code?: number;
+  error?: string;
+  checked_at: string;
 }
 
 // API 客户端
@@ -101,7 +135,7 @@ export const api = {
     return res.json();
   },
 
-  async healthCheckProvider(id: number) {
+  async healthCheckProvider(id: number): Promise<HealthCheckResult> {
     const res = await fetch(`${API_BASE_URL}/api/providers/${id}/health-check`, {
       method: 'POST',
     });
@@ -113,7 +147,88 @@ export const api = {
   async getModels(): Promise<UnifiedModel[]> {
     const res = await fetch(`${API_BASE_URL}/api/models`);
     if (!res.ok) throw new Error('Failed to fetch models');
+    const data = await res.json();
+    // 后端返回的是 { models: [...], pagination: {...} } 格式
+    return data.models || [];
+  },
+
+  async createModel(data: Partial<UnifiedModel>): Promise<UnifiedModel> {
+    const res = await fetch(`${API_BASE_URL}/api/models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to create model');
+    }
     return res.json();
+  },
+
+  async updateModel(id: number, data: Partial<UnifiedModel>): Promise<UnifiedModel> {
+    const res = await fetch(`${API_BASE_URL}/api/models/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to update model');
+    }
+    return res.json();
+  },
+
+  async deleteModel(id: number): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/models/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete model');
+  },
+
+  // 供应商模型发现
+  async getProviderModels(providerId: number): Promise<AvailableModelsResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/providers/${providerId}/models`);
+    if (!res.ok) throw new Error('Failed to fetch provider models');
+    return res.json();
+  },
+
+  // 模型映射
+  async getModelMappings(modelId: number): Promise<ModelMapping[]> {
+    const res = await fetch(`${API_BASE_URL}/api/models/${modelId}/mappings`);
+    if (!res.ok) throw new Error('Failed to fetch mappings');
+    const data = await res.json();
+    // 后端返回的是 { mappings: [...], total: number } 格式
+    return data.mappings || [];
+  },
+
+  async createMapping(modelId: number, data: Partial<ModelMapping>): Promise<ModelMapping> {
+    const res = await fetch(`${API_BASE_URL}/api/models/${modelId}/mappings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to create mapping');
+    }
+    return res.json();
+  },
+
+  async updateMapping(mappingId: number, data: Partial<ModelMapping>): Promise<ModelMapping> {
+    const res = await fetch(`${API_BASE_URL}/api/mappings/${mappingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update mapping');
+    return res.json();
+  },
+
+  async deleteMapping(mappingId: number): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/mappings/${mappingId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete mapping');
   },
 
   // Token

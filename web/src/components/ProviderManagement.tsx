@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api, type Provider } from '../lib/api';
+import Toast from './Toast';
+
+interface ToastState {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
 
 export default function ProviderManagement() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -7,6 +14,11 @@ export default function ProviderManagement() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+  const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ show: true, message, type });
+  };
 
   const fetchProviders = async () => {
     try {
@@ -28,18 +40,34 @@ export default function ProviderManagement() {
     try {
       await api.toggleProviderEnabled(id, enabled);
       await fetchProviders();
+      showToast('状态切换成功', 'success');
     } catch (err) {
-      alert('切换状态失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      showToast('切换状态失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
     }
   };
 
   const handleHealthCheck = async (id: number) => {
     try {
       const result = await api.healthCheckProvider(id);
-      alert(`健康检查完成\n状态: ${result.healthy ? '健康' : '异常'}\n响应时间: ${result.response_time_ms}ms`);
+      const statusText = result.healthy ? '健康 ✓' : '异常 ✗';
+
+      // 构建详细的提示信息
+      let message = `健康检查完成 - 状态: ${statusText}, 响应时间: ${result.response_time_ms}ms`;
+
+      // 如果有错误信息或状态码，添加到提示中
+      if (!result.healthy) {
+        if (result.status_code) {
+          message += `, HTTP ${result.status_code}`;
+        }
+        if (result.error) {
+          message += ` (${result.error})`;
+        }
+      }
+
+      showToast(message, result.healthy ? 'success' : 'error');
       await fetchProviders();
     } catch (err) {
-      alert('健康检查失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      showToast('健康检查失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
     }
   };
 
@@ -49,8 +77,9 @@ export default function ProviderManagement() {
     try {
       await api.deleteProvider(id);
       await fetchProviders();
+      showToast('删除成功', 'success');
     } catch (err) {
-      alert('删除失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      showToast('删除失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
     }
   };
 
@@ -121,9 +150,6 @@ export default function ProviderManagement() {
                   Base URL
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  优先级
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   健康状态
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -146,11 +172,6 @@ export default function ProviderManagement() {
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
                         {provider.base_url}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {provider.priority}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -220,7 +241,18 @@ export default function ProviderManagement() {
           onSuccess={() => {
             setShowCreateModal(false);
             fetchProviders();
+            showToast(editingProvider ? '供应商更新成功' : '供应商创建成功', 'success');
           }}
+          onError={(message) => showToast(message, 'error')}
+        />
+      )}
+
+      {/* Toast 通知 */}
+      {toast.show && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ ...toast, show: false })}
         />
       )}
     </div>
@@ -232,16 +264,18 @@ function ProviderModal({
   provider,
   onClose,
   onSuccess,
+  onError,
 }: {
   provider: Provider | null;
   onClose: () => void;
   onSuccess: () => void;
+  onError: (message: string) => void;
 }) {
   const [formData, setFormData] = useState({
     name: provider?.name || '',
     base_url: provider?.base_url || '',
     api_key: provider?.api_key || '',
-    priority: provider?.priority || 1,
+    test_model: provider?.test_model || 'gpt-3.5-turbo',
     enabled: provider?.enabled ?? true,
   });
   const [submitting, setSubmitting] = useState(false);
@@ -258,7 +292,7 @@ function ProviderModal({
       }
       onSuccess();
     } catch (err) {
-      alert('保存失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      onError('保存失败: ' + (err instanceof Error ? err.message : '未知错误'));
     } finally {
       setSubmitting(false);
     }
@@ -299,6 +333,9 @@ function ProviderModal({
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="https://api.example.com"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              ⚠️ 请勿在 URL 末尾添加 / 或 /v1 等路径
+            </p>
           </div>
 
           <div>
@@ -316,15 +353,19 @@ function ProviderModal({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              优先级
+              测试模型 *
             </label>
             <input
-              type="number"
-              min="1"
-              value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
+              type="text"
+              required
+              value={formData.test_model}
+              onChange={(e) => setFormData({ ...formData, test_model: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="gpt-3.5-turbo"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              健康检查将使用此模型发送测试请求
+            </p>
           </div>
 
           <div className="flex items-center">
