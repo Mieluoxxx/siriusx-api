@@ -1,0 +1,66 @@
+{
+  "project_name": "Siriusx-API",
+  "last_scan_timestamp": "2025-09-30T14:03:38+08:00",
+  "scan_metadata": {
+    "scan_version": "1.0.0",
+    "adaptive_strategy": "lightweight",
+    "total_phases_completed": 1,
+    "truncated": false
+  },
+  "repository_stats": {
+    "estimated_total_files": 1,
+    "scanned_files": 1,
+    "ignored_files": 0,
+    "coverage_percentage": 100.0,
+    "primary_language": "未确定",
+    "secondary_languages": []
+  },
+  "ignore_patterns": {
+    "source": "default",
+    "patterns": [
+      "node_modules/**",
+      ".git/**",
+      ".github/**",
+      "dist/**",
+      "build/**",
+      ".next/**",
+      "__pycache__/**",
+      "*.lock",
+      "*.log",
+      "*.bin",
+      "*.pdf",
+      "*.png",
+      "*.jpg",
+      "*.jpeg",
+      "*.gif",
+      "*.mp4",
+      "*.zip",
+      "*.tar",
+      "*.gz"
+    ]
+  },
+  "modules": [],
+  "coverage_gaps": {
+    "missing_interfaces": [],
+    "missing_tests": [],
+    "missing_data_models": [],
+    "unscanned_directories": []
+  },
+  "recommended_next_steps": [
+    "创建项目基础结构（src、tests 目录）",
+    "添加依赖管理文件确定技术栈",
+    "实现第一个核心模块",
+    "添加测试框架配置",
+    "重新运行初始化更新文档"
+  ],
+  "file_inventory": {
+    "root_files": [
+      "/Users/moguw/workspace/Siriusx-API/README.md"
+    ],
+    "configuration_files": [],
+    "entry_points": [],
+    "test_files": [],
+    "data_schemas": []
+  },
+  "incremental_update_notes": "初次扫描：项目处于空白初始化状态，仅包含 README.md 文件。"
+}
