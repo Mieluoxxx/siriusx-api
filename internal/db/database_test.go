@@ -189,12 +189,12 @@ func TestModelMappingWithForeignKey(t *testing.T) {
 
 	// 创建 ModelMapping
 	mapping := &models.ModelMapping{
-		ModelID:     model.ID,
-		ProviderID:  provider.ID,
-		TargetModel: "gpt-4",
-		Weight:      70,
-		Priority:    1,
-		Enabled:     true,
+		UnifiedModelID: model.ID,
+		ProviderID:     provider.ID,
+		TargetModel:    "gpt-4",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
 	}
 
 	result := db.Create(mapping)
@@ -204,13 +204,13 @@ func TestModelMappingWithForeignKey(t *testing.T) {
 
 	// 验证外键关系
 	var foundMapping models.ModelMapping
-	result = db.Preload("Model").Preload("Provider").First(&foundMapping, mapping.ID)
+	result = db.Preload("UnifiedModel").Preload("Provider").First(&foundMapping, mapping.ID)
 	if result.Error != nil {
 		t.Fatalf("查询 ModelMapping 失败: %v", result.Error)
 	}
 
-	if foundMapping.Model.Name != "test-model" {
-		t.Errorf("外键关系错误: Model 名称不匹配")
+	if foundMapping.UnifiedModel.Name != "test-model" {
+		t.Errorf("外键关系错误: UnifiedModel 名称不匹配")
 	}
 
 	if foundMapping.Provider.Name != "Test Provider" {

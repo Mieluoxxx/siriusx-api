@@ -13,6 +13,12 @@ var (
 	ErrModelNotFound = errors.New("model not found")
 	// ErrModelNameExists 模型名称已存在
 	ErrModelNameExists = errors.New("model name already exists")
+	// ErrMappingNotFound 映射不存在
+	ErrMappingNotFound = errors.New("mapping not found")
+	// ErrMappingExists 映射已存在
+	ErrMappingExists = errors.New("mapping already exists")
+	// ErrPriorityExists 优先级已存在
+	ErrPriorityExists = errors.New("priority already exists")
 )
 
 // Repository 统一模型数据访问层
@@ -107,6 +113,110 @@ func (r *Repository) Delete(id uint) error {
 func (r *Repository) CheckNameExists(name string, excludeID uint) (bool, error) {
 	var count int64
 	query := r.db.Model(&models.UnifiedModel{}).Where("name = ?", name)
+
+	// 如果提供了 excludeID，则排除该记录
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+// ==================== 映射相关方法 ====================
+
+// CreateMapping 创建模型映射
+func (r *Repository) CreateMapping(mapping *models.ModelMapping) error {
+	return r.db.Create(mapping).Error
+}
+
+// FindMappingsByModelID 根据统一模型 ID 查找所有映射
+func (r *Repository) FindMappingsByModelID(modelID uint) ([]*models.ModelMapping, error) {
+	var mappings []*models.ModelMapping
+	err := r.db.Where("unified_model_id = ? AND enabled = ?", modelID, true).
+		Preload("Provider").
+		Order("priority ASC").
+		Find(&mappings).Error
+	if err != nil {
+		return nil, err
+	}
+	return mappings, nil
+}
+
+// FindMappingsByModelIDWithAll 根据统一模型 ID 查找所有映射（包括禁用的）
+func (r *Repository) FindMappingsByModelIDWithAll(modelID uint, includeProvider bool) ([]*models.ModelMapping, error) {
+	var mappings []*models.ModelMapping
+	query := r.db.Where("unified_model_id = ?", modelID)
+
+	if includeProvider {
+		query = query.Preload("Provider")
+	}
+
+	err := query.Order("priority ASC").Find(&mappings).Error
+	if err != nil {
+		return nil, err
+	}
+	return mappings, nil
+}
+
+// FindMappingByID 根据 ID 查找映射
+func (r *Repository) FindMappingByID(id uint) (*models.ModelMapping, error) {
+	var mapping models.ModelMapping
+	err := r.db.Preload("Provider").First(&mapping, id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMappingNotFound
+		}
+		return nil, err
+	}
+	return &mapping, nil
+}
+
+// UpdateMapping 更新映射
+func (r *Repository) UpdateMapping(mapping *models.ModelMapping) error {
+	return r.db.Save(mapping).Error
+}
+
+// DeleteMapping 删除映射
+func (r *Repository) DeleteMapping(id uint) error {
+	result := r.db.Delete(&models.ModelMapping{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrMappingNotFound
+	}
+	return nil
+}
+
+// CheckMappingExists 检查映射是否已存在
+func (r *Repository) CheckMappingExists(modelID, providerID uint, targetModel string, excludeID uint) (bool, error) {
+	var count int64
+	query := r.db.Model(&models.ModelMapping{}).
+		Where("unified_model_id = ? AND provider_id = ? AND target_model = ?", modelID, providerID, targetModel)
+
+	// 如果提供了 excludeID，则排除该记录
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+
+	err := query.Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+// CheckPriorityExists 检查优先级是否已存在
+func (r *Repository) CheckPriorityExists(modelID uint, priority int, excludeID uint) (bool, error) {
+	var count int64
+	query := r.db.Model(&models.ModelMapping{}).
+		Where("unified_model_id = ? AND priority = ?", modelID, priority)
 
 	// 如果提供了 excludeID，则排除该记录
 	if excludeID > 0 {

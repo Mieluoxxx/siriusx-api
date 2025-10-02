@@ -3,6 +3,7 @@ package mapping
 import (
 	"testing"
 
+	"github.com/Mieluoxxx/Siriusx-API/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -11,6 +12,28 @@ func setupTestService(t *testing.T) *Service {
 	database := setupTestDB(t)
 	repo := NewRepository(database)
 	return NewService(repo)
+}
+
+func createTestModelAndProviderForService(t *testing.T, service *Service) (*ModelResponse, uint) {
+	// 创建测试统一模型
+	createReq := CreateModelRequest{
+		Name:        "test-model",
+		Description: "Test model",
+	}
+	model, err := service.CreateModel(createReq)
+	require.NoError(t, err)
+
+	// 创建测试供应商（直接插入数据库）
+	provider := &models.Provider{
+		Name:    "test-provider",
+		BaseURL: "https://api.test.com",
+		APIKey:  "sk-test123",
+		Enabled: true,
+	}
+	err = service.repo.db.Create(provider).Error
+	require.NoError(t, err)
+
+	return model, provider.ID
 }
 
 func TestService_CreateModel_Success(t *testing.T) {
@@ -422,4 +445,437 @@ func TestService_DeleteModel(t *testing.T) {
 	// 测试删除不存在的模型
 	err = service.DeleteModel(9999)
 	assert.ErrorIs(t, err, ErrModelNotFound)
+}
+
+// ==================== 映射相关测试 ====================
+
+func TestService_CreateMapping_Success(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	req := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	response, err := service.CreateMapping(req)
+	assert.NoError(t, err)
+	assert.NotNil(t, response)
+	assert.Equal(t, model.ID, response.UnifiedModelID)
+	assert.Equal(t, providerID, response.ProviderID)
+	assert.Equal(t, "gpt-4o", response.TargetModel)
+	assert.Equal(t, 70, response.Weight)
+	assert.Equal(t, 1, response.Priority)
+	assert.True(t, response.Enabled)
+	assert.NotZero(t, response.ID)
+	assert.NotZero(t, response.CreatedAt)
+}
+
+func TestService_CreateMapping_ValidationErrors(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	testCases := []struct {
+		name        string
+		req         CreateMappingRequest
+		expectedErr error
+	}{
+		{
+			name: "invalid unified model id",
+			req: CreateMappingRequest{
+				UnifiedModelID: 0,
+				ProviderID:     providerID,
+				TargetModel:    "gpt-4o",
+				Weight:         70,
+				Priority:       1,
+				Enabled:        true,
+			},
+			expectedErr: ErrModelNotFound,
+		},
+		{
+			name: "invalid provider id",
+			req: CreateMappingRequest{
+				UnifiedModelID: model.ID,
+				ProviderID:     0,
+				TargetModel:    "gpt-4o",
+				Weight:         70,
+				Priority:       1,
+				Enabled:        true,
+			},
+			expectedErr: ErrProviderNotFound,
+		},
+		{
+			name: "empty target model",
+			req: CreateMappingRequest{
+				UnifiedModelID: model.ID,
+				ProviderID:     providerID,
+				TargetModel:    "",
+				Weight:         70,
+				Priority:       1,
+				Enabled:        true,
+			},
+			expectedErr: ErrTargetModelEmpty,
+		},
+		{
+			name: "invalid weight - too low",
+			req: CreateMappingRequest{
+				UnifiedModelID: model.ID,
+				ProviderID:     providerID,
+				TargetModel:    "gpt-4o",
+				Weight:         0,
+				Priority:       1,
+				Enabled:        true,
+			},
+			expectedErr: ErrInvalidWeight,
+		},
+		{
+			name: "invalid weight - too high",
+			req: CreateMappingRequest{
+				UnifiedModelID: model.ID,
+				ProviderID:     providerID,
+				TargetModel:    "gpt-4o",
+				Weight:         101,
+				Priority:       1,
+				Enabled:        true,
+			},
+			expectedErr: ErrInvalidWeight,
+		},
+		{
+			name: "invalid priority",
+			req: CreateMappingRequest{
+				UnifiedModelID: model.ID,
+				ProviderID:     providerID,
+				TargetModel:    "gpt-4o",
+				Weight:         70,
+				Priority:       0,
+				Enabled:        true,
+			},
+			expectedErr: ErrInvalidPriority,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := service.CreateMapping(tc.req)
+			assert.ErrorIs(t, err, tc.expectedErr)
+		})
+	}
+}
+
+func TestService_CreateMapping_ModelNotFound(t *testing.T) {
+	service := setupTestService(t)
+	_, providerID := createTestModelAndProviderForService(t, service)
+
+	req := CreateMappingRequest{
+		UnifiedModelID: 9999, // 不存在的模型
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	_, err := service.CreateMapping(req)
+	assert.ErrorIs(t, err, ErrModelNotFound)
+}
+
+func TestService_CreateMapping_DuplicateMapping(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建第一个映射
+	req := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	_, err := service.CreateMapping(req)
+	require.NoError(t, err)
+
+	// 尝试创建重复映射
+	_, err = service.CreateMapping(req)
+	assert.ErrorIs(t, err, ErrMappingExists)
+}
+
+func TestService_CreateMapping_DuplicatePriority(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建第一个映射
+	req1 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	_, err := service.CreateMapping(req1)
+	require.NoError(t, err)
+
+	// 尝试创建相同优先级的映射
+	req2 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4",
+		Weight:         30,
+		Priority:       1, // 相同优先级
+		Enabled:        true,
+	}
+
+	_, err = service.CreateMapping(req2)
+	assert.ErrorIs(t, err, ErrPriorityExists)
+}
+
+func TestService_ListMappings_Success(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建两个映射
+	req1 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+	_, err := service.CreateMapping(req1)
+	require.NoError(t, err)
+
+	req2 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4",
+		Weight:         30,
+		Priority:       2,
+		Enabled:        true,
+	}
+	_, err = service.CreateMapping(req2)
+	require.NoError(t, err)
+
+	// 测试列表查询
+	response, err := service.ListMappings(model.ID, true)
+	assert.NoError(t, err)
+	assert.Len(t, response.Mappings, 2)
+	assert.Equal(t, int64(2), response.Total)
+
+	// 验证按优先级排序
+	assert.Equal(t, 1, response.Mappings[0].Priority)
+	assert.Equal(t, 2, response.Mappings[1].Priority)
+
+	// 验证包含供应商信息
+	assert.NotNil(t, response.Mappings[0].Provider)
+	assert.Equal(t, "test-provider", response.Mappings[0].Provider.Name)
+}
+
+func TestService_ListMappings_ModelNotFound(t *testing.T) {
+	service := setupTestService(t)
+
+	_, err := service.ListMappings(9999, false)
+	assert.ErrorIs(t, err, ErrModelNotFound)
+}
+
+func TestService_GetMapping_Success(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建映射
+	req := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	created, err := service.CreateMapping(req)
+	require.NoError(t, err)
+
+	// 测试获取映射
+	found, err := service.GetMapping(created.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, created.ID, found.ID)
+	assert.Equal(t, created.TargetModel, found.TargetModel)
+	assert.Equal(t, created.Weight, found.Weight)
+}
+
+func TestService_GetMapping_NotFound(t *testing.T) {
+	service := setupTestService(t)
+
+	_, err := service.GetMapping(9999)
+	assert.ErrorIs(t, err, ErrMappingNotFound)
+}
+
+func TestService_UpdateMapping_Success(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建映射
+	createReq := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	created, err := service.CreateMapping(createReq)
+	require.NoError(t, err)
+
+	// 更新映射
+	newWeight := 80
+	newTargetModel := "gpt-4o-latest"
+	enabled := false
+	updateReq := UpdateMappingRequest{
+		TargetModel: &newTargetModel,
+		Weight:      &newWeight,
+		Enabled:     &enabled,
+	}
+
+	updated, err := service.UpdateMapping(created.ID, updateReq)
+	assert.NoError(t, err)
+	assert.Equal(t, created.ID, updated.ID)
+	assert.Equal(t, "gpt-4o-latest", updated.TargetModel)
+	assert.Equal(t, 80, updated.Weight)
+	assert.False(t, updated.Enabled)
+	assert.Equal(t, 1, updated.Priority) // 优先级未更新
+}
+
+func TestService_UpdateMapping_PriorityConflict(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建两个映射
+	req1 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+	_, err := service.CreateMapping(req1)
+	require.NoError(t, err)
+
+	req2 := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4",
+		Weight:         30,
+		Priority:       2,
+		Enabled:        true,
+	}
+	mapping2, err := service.CreateMapping(req2)
+	require.NoError(t, err)
+
+	// 尝试将第二个映射的优先级改为1（冲突）
+	conflictPriority := 1
+	updateReq := UpdateMappingRequest{
+		Priority: &conflictPriority,
+	}
+
+	_, err = service.UpdateMapping(mapping2.ID, updateReq)
+	assert.ErrorIs(t, err, ErrPriorityExists)
+}
+
+func TestService_UpdateMapping_NotFound(t *testing.T) {
+	service := setupTestService(t)
+
+	newWeight := 80
+	updateReq := UpdateMappingRequest{
+		Weight: &newWeight,
+	}
+
+	_, err := service.UpdateMapping(9999, updateReq)
+	assert.ErrorIs(t, err, ErrMappingNotFound)
+}
+
+func TestService_UpdateMapping_InvalidValues(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建映射
+	createReq := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	created, err := service.CreateMapping(createReq)
+	require.NoError(t, err)
+
+	// 测试无效的权重
+	invalidWeight := 0
+	updateReq := UpdateMappingRequest{
+		Weight: &invalidWeight,
+	}
+
+	_, err = service.UpdateMapping(created.ID, updateReq)
+	assert.ErrorIs(t, err, ErrInvalidWeight)
+
+	// 测试无效的优先级
+	invalidPriority := 0
+	updateReq = UpdateMappingRequest{
+		Priority: &invalidPriority,
+	}
+
+	_, err = service.UpdateMapping(created.ID, updateReq)
+	assert.ErrorIs(t, err, ErrInvalidPriority)
+
+	// 测试空的目标模型
+	emptyTargetModel := ""
+	updateReq = UpdateMappingRequest{
+		TargetModel: &emptyTargetModel,
+	}
+
+	_, err = service.UpdateMapping(created.ID, updateReq)
+	assert.ErrorIs(t, err, ErrTargetModelEmpty)
+}
+
+func TestService_DeleteMapping_Success(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	// 创建映射
+	req := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         70,
+		Priority:       1,
+		Enabled:        true,
+	}
+
+	created, err := service.CreateMapping(req)
+	require.NoError(t, err)
+
+	// 删除映射
+	err = service.DeleteMapping(created.ID)
+	assert.NoError(t, err)
+
+	// 验证映射已删除
+	_, err = service.GetMapping(created.ID)
+	assert.ErrorIs(t, err, ErrMappingNotFound)
+}
+
+func TestService_DeleteMapping_NotFound(t *testing.T) {
+	service := setupTestService(t)
+
+	err := service.DeleteMapping(9999)
+	assert.ErrorIs(t, err, ErrMappingNotFound)
 }

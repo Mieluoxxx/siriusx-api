@@ -18,6 +18,16 @@ var (
 	ErrModelNameTooLong = errors.New("模型名称不能超过100个字符")
 	// ErrDescriptionTooLong 描述过长
 	ErrDescriptionTooLong = errors.New("描述不能超过500个字符")
+
+	// 映射相关错误
+	// ErrInvalidWeight 无效的权重
+	ErrInvalidWeight = errors.New("权重必须在1-100之间")
+	// ErrInvalidPriority 无效的优先级
+	ErrInvalidPriority = errors.New("优先级必须大于0")
+	// ErrTargetModelEmpty 目标模型为空
+	ErrTargetModelEmpty = errors.New("目标模型不能为空")
+	// ErrProviderNotFound 供应商不存在
+	ErrProviderNotFound = errors.New("供应商不存在")
 )
 
 // ModelNamePattern 模型名称正则表达式（字母、数字、连字符、下划线）
@@ -204,5 +214,207 @@ func (s *Service) validateDescription(description string) error {
 	if len(description) > 500 {
 		return ErrDescriptionTooLong
 	}
+	return nil
+}
+
+// ==================== 映射相关方法 ====================
+
+// CreateMapping 创建模型映射
+func (s *Service) CreateMapping(req CreateMappingRequest) (*MappingResponse, error) {
+	// 验证输入参数
+	if err := s.validateMappingRequest(req); err != nil {
+		return nil, err
+	}
+
+	// 检查统一模型是否存在
+	_, err := s.repo.FindByID(req.UnifiedModelID)
+	if err != nil {
+		if errors.Is(err, ErrModelNotFound) {
+			return nil, ErrModelNotFound
+		}
+		return nil, err
+	}
+
+	// 检查映射是否已存在
+	exists, err := s.repo.CheckMappingExists(req.UnifiedModelID, req.ProviderID, req.TargetModel, 0)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrMappingExists
+	}
+
+	// 检查优先级是否冲突
+	priorityExists, err := s.repo.CheckPriorityExists(req.UnifiedModelID, req.Priority, 0)
+	if err != nil {
+		return nil, err
+	}
+	if priorityExists {
+		return nil, ErrPriorityExists
+	}
+
+	// 创建映射实体
+	mapping := &models.ModelMapping{
+		UnifiedModelID: req.UnifiedModelID,
+		ProviderID:     req.ProviderID,
+		TargetModel:    strings.TrimSpace(req.TargetModel),
+		Weight:         req.Weight,
+		Priority:       req.Priority,
+		Enabled:        req.Enabled,
+	}
+
+	// 保存到数据库
+	if err := s.repo.CreateMapping(mapping); err != nil {
+		return nil, err
+	}
+
+	// 查询完整的映射信息（包含关联数据）
+	fullMapping, err := s.repo.FindMappingByID(mapping.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return ToMappingResponse(fullMapping), nil
+}
+
+// ListMappings 查询模型的所有映射
+func (s *Service) ListMappings(modelID uint, includeProvider bool) (*ListMappingsResponse, error) {
+	// 检查统一模型是否存在
+	_, err := s.repo.FindByID(modelID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 查询映射列表
+	mappings, err := s.repo.FindMappingsByModelIDWithAll(modelID, includeProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ListMappingsResponse{
+		Mappings: ToMappingResponseList(mappings),
+		Total:    int64(len(mappings)),
+	}, nil
+}
+
+// GetMapping 根据 ID 获取映射
+func (s *Service) GetMapping(id uint) (*MappingResponse, error) {
+	mapping, err := s.repo.FindMappingByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return ToMappingResponse(mapping), nil
+}
+
+// UpdateMapping 更新映射
+func (s *Service) UpdateMapping(id uint, req UpdateMappingRequest) (*MappingResponse, error) {
+	// 查找现有映射
+	mapping, err := s.repo.FindMappingByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 更新字段
+	updated := false
+
+	if req.TargetModel != nil {
+		newTargetModel := strings.TrimSpace(*req.TargetModel)
+		if newTargetModel == "" {
+			return nil, ErrTargetModelEmpty
+		}
+		if newTargetModel != mapping.TargetModel {
+			// 检查新映射是否已存在
+			exists, err := s.repo.CheckMappingExists(mapping.UnifiedModelID, mapping.ProviderID, newTargetModel, mapping.ID)
+			if err != nil {
+				return nil, err
+			}
+			if exists {
+				return nil, ErrMappingExists
+			}
+			mapping.TargetModel = newTargetModel
+			updated = true
+		}
+	}
+
+	if req.Weight != nil {
+		if *req.Weight < 1 || *req.Weight > 100 {
+			return nil, ErrInvalidWeight
+		}
+		if *req.Weight != mapping.Weight {
+			mapping.Weight = *req.Weight
+			updated = true
+		}
+	}
+
+	if req.Priority != nil {
+		if *req.Priority < 1 {
+			return nil, ErrInvalidPriority
+		}
+		if *req.Priority != mapping.Priority {
+			// 检查新优先级是否冲突
+			priorityExists, err := s.repo.CheckPriorityExists(mapping.UnifiedModelID, *req.Priority, mapping.ID)
+			if err != nil {
+				return nil, err
+			}
+			if priorityExists {
+				return nil, ErrPriorityExists
+			}
+			mapping.Priority = *req.Priority
+			updated = true
+		}
+	}
+
+	if req.Enabled != nil {
+		if *req.Enabled != mapping.Enabled {
+			mapping.Enabled = *req.Enabled
+			updated = true
+		}
+	}
+
+	// 如果有更新，保存到数据库
+	if updated {
+		if err := s.repo.UpdateMapping(mapping); err != nil {
+			return nil, err
+		}
+	}
+
+	return ToMappingResponse(mapping), nil
+}
+
+// DeleteMapping 删除映射
+func (s *Service) DeleteMapping(id uint) error {
+	// 检查映射是否存在
+	_, err := s.repo.FindMappingByID(id)
+	if err != nil {
+		return err
+	}
+
+	// 删除映射
+	return s.repo.DeleteMapping(id)
+}
+
+// validateMappingRequest 验证映射请求
+func (s *Service) validateMappingRequest(req CreateMappingRequest) error {
+	if req.UnifiedModelID == 0 {
+		return ErrModelNotFound
+	}
+
+	if req.ProviderID == 0 {
+		return ErrProviderNotFound
+	}
+
+	if strings.TrimSpace(req.TargetModel) == "" {
+		return ErrTargetModelEmpty
+	}
+
+	if req.Weight < 1 || req.Weight > 100 {
+		return ErrInvalidWeight
+	}
+
+	if req.Priority < 1 {
+		return ErrInvalidPriority
+	}
+
 	return nil
 }

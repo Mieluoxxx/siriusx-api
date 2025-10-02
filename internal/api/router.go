@@ -65,15 +65,28 @@ func setupModelRoutes(group *gin.RouterGroup, db *gorm.DB) {
 	// 创建依赖
 	repo := mapping.NewRepository(db)
 	service := mapping.NewService(repo)
-	handler := handlers.NewModelHandler(service)
+	modelHandler := handlers.NewModelHandler(service)
+	mappingHandler := handlers.NewMappingHandler(service)
 
-	// 注册路由
+	// 注册模型路由
 	models := group.Group("/models")
 	{
-		models.POST("", handler.CreateModel)
-		models.GET("", handler.ListModels)
-		models.GET("/:id", handler.GetModel)
-		models.PUT("/:id", handler.UpdateModel)
-		models.DELETE("/:id", handler.DeleteModel)
+		models.POST("", modelHandler.CreateModel)
+		models.GET("", modelHandler.ListModels)
+		models.GET("/:id", modelHandler.GetModel)
+		models.PUT("/:id", modelHandler.UpdateModel)
+		models.DELETE("/:id", modelHandler.DeleteModel)
+
+		// 模型映射路由
+		models.POST("/:id/mappings", mappingHandler.CreateMapping)
+		models.GET("/:id/mappings", mappingHandler.ListMappings)
+	}
+
+	// 注册映射路由
+	mappings := group.Group("/mappings")
+	{
+		mappings.GET("/:id", mappingHandler.GetMapping)
+		mappings.PUT("/:id", mappingHandler.UpdateMapping)
+		mappings.DELETE("/:id", mappingHandler.DeleteMapping)
 	}
 }
