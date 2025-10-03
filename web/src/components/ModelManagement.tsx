@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api, type UnifiedModel, type ModelMapping, type Provider, type AvailableModelsResponse } from '../lib/api';
 import Toast from './Toast';
 
@@ -8,12 +8,32 @@ interface ToastState {
   type: 'success' | 'error' | 'info';
 }
 
+interface ConfirmDialogState {
+  show: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+}
+
+const CLAUDE_CODE_MODEL_NAMES = [
+  'claude-3-5-haiku-20241022',
+  'claude-sonnet-4-5-20250929',
+  'claude-opus-4-1-20250805',
+];
+
 export default function ModelManagement() {
   const [models, setModels] = useState<UnifiedModel[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // 模态框状态
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -24,6 +44,8 @@ export default function ModelManagement() {
   // 映射管理状态
   const [expandedModelId, setExpandedModelId] = useState<number | null>(null);
   const [modelMappings, setModelMappings] = useState<Record<number, ModelMapping[]>>({});
+  const [activeTab, setActiveTab] = useState<'claudecode' | 'all'>('claudecode');
+  const [deletingMappingId, setDeletingMappingId] = useState<number | null>(null);
 
   // AddMapping 相关状态
   const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null);
@@ -34,6 +56,13 @@ export default function ModelManagement() {
     weight: 50,
     priority: 1,
   });
+
+  const claudeCodeModelSet = useMemo(() => new Set(CLAUDE_CODE_MODEL_NAMES), []);
+  const filteredModels = useMemo(() => (
+    activeTab === 'claudecode'
+      ? models.filter(model => claudeCodeModelSet.has(model.name))
+      : models
+  ), [activeTab, models, claudeCodeModelSet]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
@@ -74,6 +103,15 @@ export default function ModelManagement() {
     fetchProviders();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'claudecode' && expandedModelId !== null) {
+      const targetModel = models.find(item => item.id === expandedModelId);
+      if (targetModel && !claudeCodeModelSet.has(targetModel.name)) {
+        setExpandedModelId(null);
+      }
+    }
+  }, [activeTab, expandedModelId, models, claudeCodeModelSet]);
+
   const handleToggleExpand = (modelId: number) => {
     if (expandedModelId === modelId) {
       setExpandedModelId(null);
@@ -96,14 +134,31 @@ export default function ModelManagement() {
   };
 
   const handleDeleteModel = async (id: number, name: string) => {
-    if (!confirm(`确定要删除统一模型 "${name}" 吗？这将同时删除所有相关映射。`)) return;
+    // 显示自定义确认对话框
+    setConfirmDialog({
+      show: true,
+      title: '确认删除',
+      message: `确定要删除统一模型 "${name}" 吗？这将同时删除所有相关映射。`,
+      onConfirm: () => confirmDeleteModel(id, name),
+    });
+  };
+
+  const confirmDeleteModel = async (id: number, name: string) => {
+    // 关闭确认对话框
+    setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+
+    // 设置删除状态
+    setDeletingId(id);
+    showToast(`正在删除模型 "${name}"...`, 'info');
 
     try {
       await api.deleteModel(id);
       await fetchModels();
-      showToast('删除成功', 'success');
+      showToast(`模型 "${name}" 删除成功`, 'success');
     } catch (err) {
       showToast('删除失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -148,8 +203,23 @@ export default function ModelManagement() {
     }
   };
 
-  const handleDeleteMapping = async (mappingId: number, modelId: number) => {
-    if (!confirm('确定要删除此映射吗？')) return;
+  const handleDeleteMapping = async (mappingId: number, modelId: number, providerName: string, targetModel: string) => {
+    // 显示自定义确认对话框
+    setConfirmDialog({
+      show: true,
+      title: '确认删除映射',
+      message: `确定要删除映射 "${providerName}/${targetModel}" 吗？`,
+      onConfirm: () => confirmDeleteMapping(mappingId, modelId, providerName, targetModel),
+    });
+  };
+
+  const confirmDeleteMapping = async (mappingId: number, modelId: number, providerName: string, targetModel: string) => {
+    // 关闭确认对话框
+    setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+
+    // 设置删除状态
+    setDeletingMappingId(mappingId);
+    showToast(`正在删除映射 "${providerName}/${targetModel}"...`, 'info');
 
     try {
       await api.deleteMapping(mappingId);
@@ -157,6 +227,8 @@ export default function ModelManagement() {
       await fetchModelMappings(modelId);
     } catch (err) {
       showToast('删除映射失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    } finally {
+      setDeletingMappingId(null);
     }
   };
 
@@ -188,6 +260,19 @@ export default function ModelManagement() {
         />
       )}
 
+      {/* 确认删除对话框 */}
+      {confirmDialog.show && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => {
+            setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+            showToast('已取消删除', 'info');
+          }}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* 头部 */}
         <div className="flex items-center justify-between mb-8">
@@ -213,10 +298,38 @@ export default function ModelManagement() {
           </div>
         </div>
 
+        {/* Tab 切换 */}
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="flex space-x-6" aria-label="Tabs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('claudecode')}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'claudecode'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              ClaudeCode 管理
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('all')}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'all'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              全部模型
+            </button>
+          </nav>
+        </div>
+
         {/* 模型列表 */}
         <div className="grid grid-cols-1 gap-6">
-          {models.length > 0 ? (
-            models.map((model) => (
+          {filteredModels.length > 0 ? (
+            filteredModels.map((model) => (
               <div
                 key={model.id}
                 className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow"
@@ -257,9 +370,13 @@ export default function ModelManagement() {
                       </button>
                       <button
                         onClick={() => handleDeleteModel(model.id, model.name)}
-                        className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"
+                        disabled={deletingId === model.id}
+                        className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
+                          deletingId === model.id ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        title={deletingId === model.id ? '正在删除...' : '删除模型'}
                       >
-                        删除
+                        {deletingId === model.id ? '删除中...' : '删除'}
                       </button>
                       <button
                         onClick={() => handleToggleExpand(model.id)}
@@ -309,10 +426,17 @@ export default function ModelManagement() {
                             </div>
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleDeleteMapping(mapping.id, model.id)}
-                                className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100"
+                                onClick={() => {
+                                  const providerName = providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`;
+                                  handleDeleteMapping(mapping.id, model.id, providerName, mapping.target_model);
+                                }}
+                                disabled={deletingMappingId === mapping.id}
+                                className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
+                                  deletingMappingId === mapping.id ? 'opacity-50 cursor-not-allowed' : ''
+                                }`}
+                                title={deletingMappingId === mapping.id ? '正在删除...' : '删除映射'}
                               >
-                                删除
+                                {deletingMappingId === mapping.id ? '删除中...' : '删除'}
                               </button>
                             </div>
                           </div>
@@ -329,13 +453,19 @@ export default function ModelManagement() {
             ))
           ) : (
             <div className="bg-white rounded-lg shadow p-12 text-center">
-              <p className="text-gray-500 mb-4">暂无统一模型</p>
-              <button
-                onClick={handleCreateModel}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
-              >
-                创建第一个模型
-              </button>
+              {activeTab === 'claudecode' ? (
+                <p className="text-gray-500">ClaudeCode 默认模型暂未配置，请先在“全部模型”页完成设置。</p>
+              ) : (
+                <>
+                  <p className="text-gray-500 mb-4">暂无统一模型</p>
+                  <button
+                    onClick={handleCreateModel}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+                  >
+                    创建第一个模型
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -613,6 +743,50 @@ function AddMappingModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// 确认对话框组件
+function ConfirmDialog({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        </div>
+
+        <div className="px-6 py-4">
+          <p className="text-sm text-gray-700">{message}</p>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            确认删除
+          </button>
+        </div>
       </div>
     </div>
   );

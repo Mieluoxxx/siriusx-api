@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
-import { api, type Provider } from '../lib/api';
+import { api, type Provider, type ModelInfo } from '../lib/api';
 import Toast from './Toast';
 
 interface ToastState {
   show: boolean;
   message: string;
   type: 'success' | 'error' | 'info';
+}
+
+interface ConfirmDialogState {
+  show: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
 }
 
 export default function ProviderManagement() {
@@ -15,6 +22,14 @@ export default function ProviderManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
+  const [deletingId, setDeletingId] = useState<number | null>(null); // 追踪正在删除的供应商
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+  const [testingProvider, setTestingProvider] = useState<Provider | null>(null); // 正在测试的供应商
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ show: true, message, type });
@@ -72,14 +87,31 @@ export default function ProviderManagement() {
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`确定要删除供应商 "${name}" 吗？`)) return;
+    // 显示自定义确认对话框
+    setConfirmDialog({
+      show: true,
+      title: '确认删除',
+      message: `确定要删除供应商 "${name}" 吗？`,
+      onConfirm: () => confirmDelete(id, name),
+    });
+  };
+
+  const confirmDelete = async (id: number, name: string) => {
+    // 关闭确认对话框
+    setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+
+    // 设置删除状态
+    setDeletingId(id);
+    showToast(`正在删除供应商 "${name}"...`, 'info');
 
     try {
       await api.deleteProvider(id);
       await fetchProviders();
-      showToast('删除成功', 'success');
+      showToast(`供应商 "${name}" 删除成功`, 'success');
     } catch (err) {
       showToast('删除失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -91,6 +123,10 @@ export default function ProviderManagement() {
   const handleEdit = (provider: Provider) => {
     setEditingProvider(provider);
     setShowCreateModal(true);
+  };
+
+  const handleTest = (provider: Provider) => {
+    setTestingProvider(provider);
   };
 
   if (loading) {
@@ -130,6 +166,7 @@ export default function ProviderManagement() {
               返回首页
             </a>
             <button
+              type="button"
               onClick={handleCreate}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
             >
@@ -187,6 +224,7 @@ export default function ProviderManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
+                        type="button"
                         onClick={() => handleToggleEnabled(provider.id, !provider.enabled)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                           provider.enabled ? 'bg-blue-600' : 'bg-gray-200'
@@ -201,22 +239,36 @@ export default function ProviderManagement() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
+                        type="button"
                         onClick={() => handleHealthCheck(provider.id)}
                         className="text-blue-600 hover:text-blue-900 mr-4"
                       >
                         检查
                       </button>
                       <button
+                        type="button"
+                        onClick={() => handleTest(provider)}
+                        className="text-green-600 hover:text-green-900 mr-4"
+                      >
+                        测试
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleEdit(provider)}
                         className="text-indigo-600 hover:text-indigo-900 mr-4"
                       >
                         编辑
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(provider.id, provider.name)}
-                        className="text-red-600 hover:text-red-900"
+                        disabled={deletingId === provider.id}
+                        className={`text-red-600 hover:text-red-900 transition-opacity ${
+                          deletingId === provider.id ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                        title={deletingId === provider.id ? '正在删除...' : '删除供应商'}
                       >
-                        删除
+                        {deletingId === provider.id ? '删除中...' : '删除'}
                       </button>
                     </td>
                   </tr>
@@ -255,9 +307,174 @@ export default function ProviderManagement() {
           onClose={() => setToast({ ...toast, show: false })}
         />
       )}
+
+      {/* 确认删除对话框 */}
+      {confirmDialog.show && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => {
+            setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+            showToast('已取消删除', 'info');
+          }}
+        />
+      )}
+
+      {/* 测试模态框 */}
+      {testingProvider && (
+        <ModelTestModal
+          provider={testingProvider}
+          onClose={() => setTestingProvider(null)}
+          onError={(message) => showToast(message, 'error')}
+        />
+      )}
     </div>
   );
 }
+
+// 模型测试模态框组件
+function ModelTestModal({
+  provider,
+  onClose,
+  onError,
+}: {
+  provider: Provider;
+  onClose: () => void;
+  onError: (message: string) => void;
+}) {
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [testingModel, setTestingModel] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, { success: boolean; responseTime?: number; error?: string }>>({});
+
+  // 加载模型列表
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        setLoading(true);
+        const result = await api.getProviderModels(provider.id);
+        setModels(result.models);
+      } catch (err) {
+        onError('获取模型列表失败: ' + (err instanceof Error ? err.message : '未知错误'));
+        onClose();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchModels();
+  }, [provider.id, onClose, onError]);
+
+  // 测试单个模型
+  const handleTestModel = async (modelName: string) => {
+    setTestingModel(modelName);
+    try {
+      const result = await api.testProviderModel(provider.id, modelName);
+      setTestResults(prev => ({
+        ...prev,
+        [modelName]: {
+          success: result.success,
+          responseTime: result.response_time_ms,
+          error: result.error,
+        },
+      }));
+    } catch (err) {
+      setTestResults(prev => ({
+        ...prev,
+        [modelName]: {
+          success: false,
+          error: err instanceof Error ? err.message : '未知错误',
+        },
+      }));
+    } finally {
+      setTestingModel(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">
+            测试供应商模型 - {provider.name}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto flex-1">
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">加载模型列表中...</div>
+          ) : models.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">未找到可用模型</div>
+          ) : (
+            <div className="space-y-2">
+              {models.map((model) => {
+                const result = testResults[model.id];
+                const isTesting = testingModel === model.id;
+
+                return (
+                  <div
+                    key={model.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{model.id}</div>
+                      {result && (
+                        <div className="text-sm mt-1">
+                          {result.success ? (
+                            <span className="text-green-600">
+                              ✓ 成功 - 响应时间: {result.responseTime}ms
+                            </span>
+                          ) : (
+                            <span className="text-red-600">
+                              ✗ 失败 - {result.error}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleTestModel(model.id)}
+                      disabled={isTesting}
+                      className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
+                        isTesting
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {isTesting ? '测试中...' : '测试'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 flex justify-end rounded-b-lg">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // 供应商创建/编辑模态框组件
 function ProviderModal({
@@ -399,6 +616,49 @@ function ProviderModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+// 确认对话框组件
+function ConfirmDialog({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        </div>
+
+        <div className="px-6 py-4">
+          <p className="text-sm text-gray-700">{message}</p>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            确认删除
+          </button>
+        </div>
       </div>
     </div>
   );

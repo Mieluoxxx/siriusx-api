@@ -1,5 +1,19 @@
 import { useState, useEffect } from 'react';
 import { api, type Token } from '../lib/api';
+import Toast from './Toast';
+
+interface ToastState {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+interface ConfirmDialogState {
+  show: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+}
 
 export default function TokenManagement() {
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -9,6 +23,18 @@ export default function TokenManagement() {
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [visibleTokens, setVisibleTokens] = useState<Set<number>>(new Set());
   const [fullTokens, setFullTokens] = useState<Map<number, string>>(new Map());
+  const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ show: true, message, type });
+  };
 
   const fetchTokens = async () => {
     try {
@@ -27,13 +53,31 @@ export default function TokenManagement() {
   }, []);
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`确定要删除 Token "${name}" 吗？删除后无法恢复！`)) return;
+    // 显示自定义确认对话框
+    setConfirmDialog({
+      show: true,
+      title: '确认删除',
+      message: `确定要删除 Token "${name}" 吗？删除后无法恢复！`,
+      onConfirm: () => confirmDelete(id, name),
+    });
+  };
+
+  const confirmDelete = async (id: number, name: string) => {
+    // 关闭确认对话框
+    setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+
+    // 设置删除状态
+    setDeletingId(id);
+    showToast(`正在删除 Token "${name}"...`, 'info');
 
     try {
       await api.deleteToken(id);
       await fetchTokens();
+      showToast(`Token "${name}" 删除成功`, 'success');
     } catch (err) {
-      alert('删除失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      showToast('删除失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -55,13 +99,23 @@ export default function TokenManagement() {
         newFullTokens.set(tokenId, fullToken);
         setFullTokens(newFullTokens);
       } catch (err) {
-        alert('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+        showToast('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
         return;
       }
     }
 
     navigator.clipboard.writeText(fullToken);
-    alert('Token 已复制到剪贴板！');
+    showToast('Token 已复制到剪贴板！', 'success');
+  };
+
+  const handleCopyTokenString = async (token: string) => {
+    // 直接复制 Token 字符串（用于 CreateTokenModal）
+    try {
+      await navigator.clipboard.writeText(token);
+      showToast('Token 已复制到剪贴板！', 'success');
+    } catch (err) {
+      showToast('复制失败', 'error');
+    }
   };
 
   const toggleTokenVisibility = async (id: number) => {
@@ -80,7 +134,7 @@ export default function TokenManagement() {
           newFullTokens.set(id, result.token);
           setFullTokens(newFullTokens);
         } catch (err) {
-          alert('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+          showToast('获取 Token 失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
           return;
         }
       }
@@ -116,6 +170,27 @@ export default function TokenManagement() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      {toast.show && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast({ ...toast, show: false })}
+        />
+      )}
+
+      {/* 确认删除对话框 */}
+      {confirmDialog.show && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => {
+            setConfirmDialog({ show: false, title: '', message: '', onConfirm: () => {} });
+            showToast('已取消删除', 'info');
+          }}
+        />
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* 头部 */}
         <div className="flex items-center justify-between mb-8">
@@ -237,9 +312,13 @@ export default function TokenManagement() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleDelete(token.id, token.name)}
-                          className="text-red-600 hover:text-red-900"
+                          disabled={deletingId === token.id}
+                          className={`text-red-600 hover:text-red-900 transition-opacity ${
+                            deletingId === token.id ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          title={deletingId === token.id ? '正在删除...' : '删除 Token'}
                         >
-                          删除
+                          {deletingId === token.id ? '删除中...' : '删除'}
                         </button>
                       </td>
                     </tr>
@@ -291,8 +370,9 @@ export default function TokenManagement() {
             setCreatedToken(token);
             fetchTokens();
           }}
+          onError={(message) => showToast(message, 'error')}
           createdToken={createdToken}
-          onCopyToken={handleCopyToken}
+          onCopyToken={handleCopyTokenString}
         />
       )}
     </div>
@@ -303,11 +383,13 @@ export default function TokenManagement() {
 function CreateTokenModal({
   onClose,
   onSuccess,
+  onError,
   createdToken,
   onCopyToken,
 }: {
   onClose: () => void;
   onSuccess: (token: string) => void;
+  onError: (message: string) => void;
   createdToken: string | null;
   onCopyToken: (token: string) => void;
 }) {
@@ -331,7 +413,7 @@ function CreateTokenModal({
       });
       onSuccess(result.token);
     } catch (err) {
-      alert('创建失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      onError('创建失败: ' + (err instanceof Error ? err.message : '未知错误'));
     } finally {
       setSubmitting(false);
     }
@@ -483,6 +565,50 @@ function CreateTokenModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// 确认对话框组件
+function ConfirmDialog({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+        </div>
+
+        <div className="px-6 py-4">
+          <p className="text-sm text-gray-700">{message}</p>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 flex justify-end space-x-3 rounded-b-lg">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+          >
+            确认删除
+          </button>
+        </div>
       </div>
     </div>
   );
