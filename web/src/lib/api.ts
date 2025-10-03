@@ -8,12 +8,20 @@ export interface SystemStats {
   };
   requests: {
     total: number;
-    current_qps: number;
   };
-  recent_events: Array<{
+  recent_api_calls: Array<{
+    id: number;
     timestamp: string;
-    type: string;
-    message: string;
+    path: string;
+    model: string;
+    provider_name: string;
+    status_code: number;
+    response_time_ms: number;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    request_summary: string;
+    error_message?: string;
   }>;
 }
 
@@ -82,6 +90,17 @@ export interface HealthCheckResult {
   checked_at: string;
 }
 
+export interface ModelTestResult {
+  provider_id: number;
+  provider_name: string;
+  model_name: string;
+  success: boolean;
+  response_time_ms: number;
+  status_code?: number;
+  error?: string;
+  tested_at: string;
+}
+
 // API 客户端
 export const api = {
   // 统计
@@ -140,6 +159,16 @@ export const api = {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to health check provider');
+    return res.json();
+  },
+
+  async testProviderModel(providerId: number, modelName: string): Promise<ModelTestResult> {
+    const res = await fetch(`${API_BASE_URL}/api/providers/${providerId}/test-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_name: modelName }),
+    });
+    if (!res.ok) throw new Error('Failed to test provider model');
     return res.json();
   },
 
