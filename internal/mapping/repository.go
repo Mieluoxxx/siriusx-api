@@ -17,8 +17,7 @@ var (
 	ErrMappingNotFound = errors.New("mapping not found")
 	// ErrMappingExists 映射已存在
 	ErrMappingExists = errors.New("mapping already exists")
-	// ErrPriorityExists 优先级已存在
-	ErrPriorityExists = errors.New("priority already exists")
+	// 注意：已移除 ErrPriorityExists，允许相同的优先级
 )
 
 // Repository 统一模型数据访问层
@@ -94,7 +93,7 @@ func (r *Repository) FindAll(page, pageSize int, search string) ([]*models.Unifi
 // Update 更新模型
 func (r *Repository) Update(model *models.UnifiedModel) error {
 	// 使用 Select 明确指定要更新的字段
-	return r.db.Select("Name", "Description").Save(model).Error
+	return r.db.Select("Name", "DisplayName", "Description").Save(model).Error
 }
 
 // Delete 删除模型（软删除）
@@ -212,21 +211,22 @@ func (r *Repository) CheckMappingExists(modelID, providerID uint, targetModel st
 	return count > 0, nil
 }
 
-// CheckPriorityExists 检查优先级是否已存在
-func (r *Repository) CheckPriorityExists(modelID uint, priority int, excludeID uint) (bool, error) {
-	var count int64
-	query := r.db.Model(&models.ModelMapping{}).
-		Where("unified_model_id = ? AND priority = ?", modelID, priority)
-
-	// 如果提供了 excludeID，则排除该记录
-	if excludeID > 0 {
-		query = query.Where("id != ?", excludeID)
-	}
-
-	err := query.Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
+// 注意：CheckPriorityExists 方法已弃用，因为允许相同的优先级
+// 保留此方法以防未来需要，但不再使用
+// func (r *Repository) CheckPriorityExists(modelID uint, priority int, excludeID uint) (bool, error) {
+// 	var count int64
+// 	query := r.db.Model(&models.ModelMapping{}).
+// 		Where("unified_model_id = ? AND priority = ?", modelID, priority)
+//
+// 	// 如果提供了 excludeID，则排除该记录
+// 	if excludeID > 0 {
+// 		query = query.Where("id != ?", excludeID)
+// 	}
+//
+// 	err := query.Count(&count).Error
+// 	if err != nil {
+// 		return false, err
+// 	}
+//
+// 	return count > 0, nil
+// }

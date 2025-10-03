@@ -79,8 +79,8 @@ type CreateMappingRequest struct {
 	UnifiedModelID uint   `json:"-"` // 从URL路径获取，不需要在JSON中提供
 	ProviderID     uint   `json:"provider_id" binding:"required"`
 	TargetModel    string `json:"target_model" binding:"required,max=100"`
-	Weight         int    `json:"weight" binding:"required,min=1,max=100"`
-	Priority       int    `json:"priority" binding:"required,min=1"`
+	Weight         int    `json:"weight" binding:"omitempty,min=1,max=100"` // 可选，默认50
+	Priority       int    `json:"priority" binding:"omitempty,min=1"`        // 可选，默认1
 	Enabled        bool   `json:"enabled"`
 }
 

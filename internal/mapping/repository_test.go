@@ -468,35 +468,37 @@ func TestRepository_CheckMappingExists(t *testing.T) {
 	assert.False(t, exists)
 }
 
-func TestRepository_CheckPriorityExists(t *testing.T) {
-	database := setupTestDB(t)
-	repo := NewRepository(database)
-	model, provider := createTestModelAndProvider(t, repo)
-
-	// 创建映射
-	mapping := &models.ModelMapping{
-		UnifiedModelID: model.ID,
-		ProviderID:     provider.ID,
-		TargetModel:    "gpt-4o",
-		Weight:         70,
-		Priority:       1,
-		Enabled:        true,
-	}
-	err := repo.CreateMapping(mapping)
-	require.NoError(t, err)
-
-	// 测试优先级存在
-	exists, err := repo.CheckPriorityExists(model.ID, 1, 0)
-	assert.NoError(t, err)
-	assert.True(t, exists)
-
-	// 测试优先级不存在
-	exists, err = repo.CheckPriorityExists(model.ID, 2, 0)
-	assert.NoError(t, err)
-	assert.False(t, exists)
-
-	// 测试排除当前映射
-	exists, err = repo.CheckPriorityExists(model.ID, 1, mapping.ID)
-	assert.NoError(t, err)
-	assert.False(t, exists)
-}
+// 注意：TestRepository_CheckPriorityExists 已弃用
+// 因为允许相同的优先级，CheckPriorityExists 方法不再使用
+// func TestRepository_CheckPriorityExists(t *testing.T) {
+// 	database := setupTestDB(t)
+// 	repo := NewRepository(database)
+// 	model, provider := createTestModelAndProvider(t, repo)
+//
+// 	// 创建映射
+// 	mapping := &models.ModelMapping{
+// 		UnifiedModelID: model.ID,
+// 		ProviderID:     provider.ID,
+// 		TargetModel:    "gpt-4o",
+// 		Weight:         70,
+// 		Priority:       1,
+// 		Enabled:        true,
+// 	}
+// 	err := repo.CreateMapping(mapping)
+// 	require.NoError(t, err)
+//
+// 	// 测试优先级存在
+// 	exists, err := repo.CheckPriorityExists(model.ID, 1, 0)
+// 	assert.NoError(t, err)
+// 	assert.True(t, exists)
+//
+// 	// 测试优先级不存在
+// 	exists, err = repo.CheckPriorityExists(model.ID, 2, 0)
+// 	assert.NoError(t, err)
+// 	assert.False(t, exists)
+//
+// 	// 测试排除当前映射
+// 	exists, err = repo.CheckPriorityExists(model.ID, 1, mapping.ID)
+// 	assert.NoError(t, err)
+// 	assert.False(t, exists)
+// }

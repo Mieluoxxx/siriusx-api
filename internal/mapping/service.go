@@ -11,7 +11,7 @@ import (
 
 var (
 	// ErrInvalidModelName 无效的模型名称
-	ErrInvalidModelName = errors.New("模型名称只能包含字母、数字、连字符和下划线")
+	ErrInvalidModelName = errors.New("模型名称只能包含字母、数字、连字符、下划线、点号和@符号")
 	// ErrModelNameEmpty 模型名称为空
 	ErrModelNameEmpty = errors.New("模型名称不能为空")
 	// ErrModelNameTooLong 模型名称过长
@@ -34,8 +34,8 @@ var (
 	ErrProviderNotFound = errors.New("供应商不存在")
 )
 
-// ModelNamePattern 模型名称正则表达式（字母、数字、连字符、下划线）
-var ModelNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+// ModelNamePattern 模型名称正则表达式（字母、数字、连字符、下划线、点号、@符号）
+var ModelNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.\-@]+$`)
 
 // Service 统一模型业务逻辑层
 type Service struct {
@@ -256,7 +256,15 @@ func (s *Service) validateDescription(description string) error {
 
 // CreateMapping 创建模型映射
 func (s *Service) CreateMapping(req CreateMappingRequest) (*MappingResponse, error) {
-	// 验证输入参数
+	// 设置默认值（仅当为0时）
+	if req.Weight == 0 {
+		req.Weight = 50 // 默认权重 50
+	}
+	if req.Priority == 0 {
+		req.Priority = 1 // 默认优先级 1
+	}
+
+	// 验证输入参数（负数会被拒绝）
 	if err := s.validateMappingRequest(req); err != nil {
 		return nil, err
 	}
@@ -279,14 +287,7 @@ func (s *Service) CreateMapping(req CreateMappingRequest) (*MappingResponse, err
 		return nil, ErrMappingExists
 	}
 
-	// 检查优先级是否冲突
-	priorityExists, err := s.repo.CheckPriorityExists(req.UnifiedModelID, req.Priority, 0)
-	if err != nil {
-		return nil, err
-	}
-	if priorityExists {
-		return nil, ErrPriorityExists
-	}
+	// 注意：允许相同的优先级，不再检查优先级冲突
 
 	// 创建映射实体
 	mapping := &models.ModelMapping{
@@ -387,14 +388,7 @@ func (s *Service) UpdateMapping(id uint, req UpdateMappingRequest) (*MappingResp
 			return nil, ErrInvalidPriority
 		}
 		if *req.Priority != mapping.Priority {
-			// 检查新优先级是否冲突
-			priorityExists, err := s.repo.CheckPriorityExists(mapping.UnifiedModelID, *req.Priority, mapping.ID)
-			if err != nil {
-				return nil, err
-			}
-			if priorityExists {
-				return nil, ErrPriorityExists
-			}
+			// 注意：允许相同的优先级，不再检查优先级冲突
 			mapping.Priority = *req.Priority
 			updated = true
 		}

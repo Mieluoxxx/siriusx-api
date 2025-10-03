@@ -18,6 +18,7 @@ func createTestModelAndProviderForService(t *testing.T, service *Service) (*Mode
 	// 创建测试统一模型
 	createReq := CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "Test Model",
 		Description: "Test model",
 	}
 	model, err := service.CreateModel(createReq)
@@ -41,6 +42,7 @@ func TestService_CreateModel_Success(t *testing.T) {
 
 	req := CreateModelRequest{
 		Name:        "claude-sonnet-4",
+		DisplayName: "Claude Sonnet 4",
 		Description: "Claude Sonnet 4 model",
 	}
 
@@ -57,7 +59,8 @@ func TestService_CreateModel_WithOptionalFields(t *testing.T) {
 	service := setupTestService(t)
 
 	req := CreateModelRequest{
-		Name: "gpt-4o",
+		Name:        "gpt-4o",
+		DisplayName: "GPT-4o",
 		// Description 为空，应该允许
 	}
 
@@ -72,6 +75,7 @@ func TestService_CreateModel_EmptyName(t *testing.T) {
 
 	req := CreateModelRequest{
 		Name:        "",
+		DisplayName: "Test Display",
 		Description: "Test description",
 	}
 
@@ -94,7 +98,7 @@ func TestService_CreateModel_InvalidName(t *testing.T) {
 		},
 		{
 			name:        "special characters",
-			modelName:   "model@special!",
+			modelName:   "model!special#",
 			expectedErr: ErrInvalidModelName,
 		},
 		{
@@ -108,6 +112,7 @@ func TestService_CreateModel_InvalidName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := CreateModelRequest{
 				Name:        tc.modelName,
+				DisplayName: "Test Display",
 				Description: "Test description",
 			}
 
@@ -126,12 +131,18 @@ func TestService_CreateModel_ValidNames(t *testing.T) {
 		"model123",
 		"simple",
 		"a-very-long-but-valid-model-name-with-hyphens-and-underscores_123",
+		"glm-4.5",               // 包含点号
+		"claude.ai",             // 包含点号
+		"model@provider",        // 包含@符号
+		"user@host.model",       // 同时包含点号和@符号
+		"gpt-4.0-turbo@openai", // 复杂组合
 	}
 
 	for _, name := range validNames {
 		t.Run(name, func(t *testing.T) {
 			req := CreateModelRequest{
 				Name:        name,
+				DisplayName: "Test Display - " + name,
 				Description: "Test description",
 			}
 
@@ -147,6 +158,7 @@ func TestService_CreateModel_DescriptionTooLong(t *testing.T) {
 
 	req := CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "Test Display",
 		Description: string(make([]byte, 501)), // 501 字符
 	}
 
@@ -160,6 +172,7 @@ func TestService_CreateModel_DuplicateName(t *testing.T) {
 	// 创建第一个模型
 	req := CreateModelRequest{
 		Name:        "claude-sonnet-4",
+		DisplayName: "Claude Sonnet 4",
 		Description: "First model",
 	}
 
@@ -169,6 +182,7 @@ func TestService_CreateModel_DuplicateName(t *testing.T) {
 	// 尝试创建同名模型
 	req2 := CreateModelRequest{
 		Name:        "claude-sonnet-4",
+		DisplayName: "Claude Sonnet 4 Duplicate",
 		Description: "Second model",
 	}
 
@@ -182,6 +196,7 @@ func TestService_GetModel(t *testing.T) {
 	// 创建测试模型
 	req := CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "Test Model",
 		Description: "Test description",
 	}
 
@@ -205,9 +220,9 @@ func TestService_ListModels(t *testing.T) {
 
 	// 创建测试数据
 	models := []CreateModelRequest{
-		{Name: "claude-sonnet-4", Description: "Claude Sonnet 4"},
-		{Name: "gpt-4o", Description: "GPT-4o"},
-		{Name: "claude-haiku", Description: "Claude Haiku"},
+		{Name: "claude-sonnet-4", DisplayName: "Claude Sonnet 4", Description: "Claude Sonnet 4"},
+		{Name: "gpt-4o", DisplayName: "GPT-4o", Description: "GPT-4o"},
+		{Name: "claude-haiku", DisplayName: "Claude Haiku", Description: "Claude Haiku"},
 	}
 
 	for _, model := range models {
@@ -332,6 +347,7 @@ func TestService_UpdateModel_Success(t *testing.T) {
 	// 创建测试模型
 	createReq := CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "Test Model",
 		Description: "Original description",
 	}
 
@@ -359,6 +375,7 @@ func TestService_UpdateModel_PartialUpdate(t *testing.T) {
 	// 创建测试模型
 	createReq := CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "Test Model",
 		Description: "Original description",
 	}
 
@@ -394,10 +411,10 @@ func TestService_UpdateModel_DuplicateName(t *testing.T) {
 	service := setupTestService(t)
 
 	// 创建两个模型
-	_, err := service.CreateModel(CreateModelRequest{Name: "model-1"})
+	_, err := service.CreateModel(CreateModelRequest{Name: "model-1", DisplayName: "Model 1"})
 	require.NoError(t, err)
 
-	model2, err := service.CreateModel(CreateModelRequest{Name: "model-2"})
+	model2, err := service.CreateModel(CreateModelRequest{Name: "model-2", DisplayName: "Model 2"})
 	require.NoError(t, err)
 
 	// 尝试将 model-2 的名称改为 model-1（冲突）
@@ -414,7 +431,7 @@ func TestService_UpdateModel_EmptyName(t *testing.T) {
 	service := setupTestService(t)
 
 	// 创建测试模型
-	created, err := service.CreateModel(CreateModelRequest{Name: "test-model"})
+	created, err := service.CreateModel(CreateModelRequest{Name: "test-model", DisplayName: "Test Model"})
 	require.NoError(t, err)
 
 	// 尝试设置空名称
@@ -431,7 +448,7 @@ func TestService_DeleteModel(t *testing.T) {
 	service := setupTestService(t)
 
 	// 创建测试模型
-	created, err := service.CreateModel(CreateModelRequest{Name: "test-model"})
+	created, err := service.CreateModel(CreateModelRequest{Name: "test-model", DisplayName: "Test Model"})
 	require.NoError(t, err)
 
 	// 删除模型
@@ -473,6 +490,26 @@ func TestService_CreateMapping_Success(t *testing.T) {
 	assert.True(t, response.Enabled)
 	assert.NotZero(t, response.ID)
 	assert.NotZero(t, response.CreatedAt)
+}
+
+func TestService_CreateMapping_WithDefaultValues(t *testing.T) {
+	service := setupTestService(t)
+	model, providerID := createTestModelAndProviderForService(t, service)
+
+	req := CreateMappingRequest{
+		UnifiedModelID: model.ID,
+		ProviderID:     providerID,
+		TargetModel:    "gpt-4o",
+		Weight:         0, // 使用默认值
+		Priority:       0, // 使用默认值
+		Enabled:        true,
+	}
+
+	response, err := service.CreateMapping(req)
+	assert.NoError(t, err)
+	assert.NotNil(t, response)
+	assert.Equal(t, 50, response.Weight, "应该使用默认权重50")
+	assert.Equal(t, 1, response.Priority, "应该使用默认优先级1")
 }
 
 func TestService_CreateMapping_ValidationErrors(t *testing.T) {
@@ -521,12 +558,12 @@ func TestService_CreateMapping_ValidationErrors(t *testing.T) {
 			expectedErr: ErrTargetModelEmpty,
 		},
 		{
-			name: "invalid weight - too low",
+			name: "invalid weight - negative",
 			req: CreateMappingRequest{
 				UnifiedModelID: model.ID,
 				ProviderID:     providerID,
 				TargetModel:    "gpt-4o",
-				Weight:         0,
+				Weight:         -1,
 				Priority:       1,
 				Enabled:        true,
 			},
@@ -545,13 +582,13 @@ func TestService_CreateMapping_ValidationErrors(t *testing.T) {
 			expectedErr: ErrInvalidWeight,
 		},
 		{
-			name: "invalid priority",
+			name: "invalid priority - negative",
 			req: CreateMappingRequest{
 				UnifiedModelID: model.ID,
 				ProviderID:     providerID,
-				TargetModel:    "gpt-4o",
+				TargetModel:    "gpt-4o-test",
 				Weight:         70,
-				Priority:       0,
+				Priority:       -1,
 				Enabled:        true,
 			},
 			expectedErr: ErrInvalidPriority,
@@ -622,7 +659,7 @@ func TestService_CreateMapping_DuplicatePriority(t *testing.T) {
 	_, err := service.CreateMapping(req1)
 	require.NoError(t, err)
 
-	// 尝试创建相同优先级的映射
+	// 尝试创建相同优先级的映射 - 现在应该允许
 	req2 := CreateMappingRequest{
 		UnifiedModelID: model.ID,
 		ProviderID:     providerID,
@@ -632,8 +669,9 @@ func TestService_CreateMapping_DuplicatePriority(t *testing.T) {
 		Enabled:        true,
 	}
 
-	_, err = service.CreateMapping(req2)
-	assert.ErrorIs(t, err, ErrPriorityExists)
+	mapping2, err := service.CreateMapping(req2)
+	assert.NoError(t, err, "应该允许相同的优先级")
+	assert.Equal(t, 1, mapping2.Priority, "优先级应该是1")
 }
 
 func TestService_ListMappings_Success(t *testing.T) {
@@ -780,14 +818,15 @@ func TestService_UpdateMapping_PriorityConflict(t *testing.T) {
 	mapping2, err := service.CreateMapping(req2)
 	require.NoError(t, err)
 
-	// 尝试将第二个映射的优先级改为1（冲突）
-	conflictPriority := 1
+	// 尝试将第二个映射的优先级改为1 - 现在应该允许
+	newPriority := 1
 	updateReq := UpdateMappingRequest{
-		Priority: &conflictPriority,
+		Priority: &newPriority,
 	}
 
-	_, err = service.UpdateMapping(mapping2.ID, updateReq)
-	assert.ErrorIs(t, err, ErrPriorityExists)
+	updated, err := service.UpdateMapping(mapping2.ID, updateReq)
+	assert.NoError(t, err, "应该允许更新为相同的优先级")
+	assert.Equal(t, 1, updated.Priority, "优先级应该更新为1")
 }
 
 func TestService_UpdateMapping_NotFound(t *testing.T) {
