@@ -53,9 +53,11 @@ export default function ModelManagement() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [mappingForm, setMappingForm] = useState({
     target_model: '',
-    weight: 50,
-    priority: 1,
   });
+
+  // 编辑映射状态
+  const [editingMappingId, setEditingMappingId] = useState<number | null>(null);
+  const [editingMappingForm, setEditingMappingForm] = useState<{ weight: number; priority: number }>({ weight: 50, priority: 1 });
 
   const claudeCodeModelSet = useMemo(() => new Set(CLAUDE_CODE_MODEL_NAMES), []);
   const filteredModels = useMemo(() => (
@@ -166,7 +168,7 @@ export default function ModelManagement() {
     setSelectedModel(model);
     setSelectedProviderId(null);
     setAvailableModels(null);
-    setMappingForm({ target_model: '', weight: 50, priority: 1 });
+    setMappingForm({ target_model: '' });
     setShowAddMappingModal(true);
   };
 
@@ -191,8 +193,8 @@ export default function ModelManagement() {
       await api.createMapping(selectedModel.id, {
         provider_id: selectedProviderId,
         target_model: mappingForm.target_model,
-        weight: mappingForm.weight,
-        priority: mappingForm.priority,
+        weight: 50, // 默认权重
+        priority: 1, // 默认优先级
         enabled: true,
       });
       showToast('映射添加成功', 'success');
@@ -211,6 +213,27 @@ export default function ModelManagement() {
       message: `确定要删除映射 "${providerName}/${targetModel}" 吗？`,
       onConfirm: () => confirmDeleteMapping(mappingId, modelId, providerName, targetModel),
     });
+  };
+
+  const handleEditMapping = (mapping: ModelMapping) => {
+    setEditingMappingId(mapping.id);
+    setEditingMappingForm({ weight: mapping.weight, priority: mapping.priority });
+  };
+
+  const handleCancelEditMapping = () => {
+    setEditingMappingId(null);
+    setEditingMappingForm({ weight: 50, priority: 1 });
+  };
+
+  const handleSaveMapping = async (mappingId: number, modelId: number) => {
+    try {
+      await api.updateMapping(mappingId, editingMappingForm);
+      showToast('映射更新成功', 'success');
+      setEditingMappingId(null);
+      await fetchModelMappings(modelId);
+    } catch (err) {
+      showToast('更新映射失败: ' + (err instanceof Error ? err.message : '未知错误'), 'error');
+    }
   };
 
   const confirmDeleteMapping = async (mappingId: number, modelId: number, providerName: string, targetModel: string) => {
@@ -399,48 +422,128 @@ export default function ModelManagement() {
                     <h4 className="text-sm font-medium text-gray-900 mb-4">供应商映射</h4>
                     {modelMappings[model.id] && modelMappings[model.id].length > 0 ? (
                       <div className="space-y-3">
-                        {modelMappings[model.id].map((mapping) => (
-                          <div
-                            key={mapping.id}
-                            className="bg-white p-4 rounded-lg border border-gray-200 flex items-center justify-between"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <span className="text-sm font-mono text-gray-900">
-                                  {providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`}/{mapping.target_model}
-                                </span>
-                                {mapping.enabled ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                    启用
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                    禁用
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex gap-4 text-xs text-gray-500">
-                                <span>权重: {mapping.weight}</span>
-                                <span>优先级: {mapping.priority}</span>
+                        {modelMappings[model.id].map((mapping) => {
+                          const isEditing = editingMappingId === mapping.id;
+                          return (
+                            <div
+                              key={mapping.id}
+                              className="bg-white p-4 rounded-lg border border-gray-200"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className="text-sm font-mono text-gray-900">
+                                      {providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`}/{mapping.target_model}
+                                    </span>
+                                    {mapping.enabled ? (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                        启用
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                        禁用
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {isEditing ? (
+                                    <div className="space-y-3 mt-3">
+                                      <div className="flex gap-4">
+                                        <div className="flex-1">
+                                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            <span className="inline-flex items-center gap-1">
+                                              权重 (1-100)
+                                              <span
+                                                className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
+                                                title="负载均衡时的权重值，数值越大被选中的概率越高"
+                                              >
+                                                ?
+                                              </span>
+                                            </span>
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="100"
+                                            value={editingMappingForm.weight}
+                                            onChange={(e) => setEditingMappingForm({ ...editingMappingForm, weight: parseInt(e.target.value) || 1 })}
+                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          />
+                                        </div>
+                                        <div className="flex-1">
+                                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                                            <span className="inline-flex items-center gap-1">
+                                              优先级 (≥1)
+                                              <span
+                                                className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
+                                                title="映射的优先级，数字越小优先级越高，优先级高的映射会被优先使用"
+                                              >
+                                                ?
+                                              </span>
+                                            </span>
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={editingMappingForm.priority}
+                                            onChange={(e) => setEditingMappingForm({ ...editingMappingForm, priority: parseInt(e.target.value) || 1 })}
+                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex gap-4 text-xs text-gray-500">
+                                      <span>权重: {mapping.weight}</span>
+                                      <span>优先级: {mapping.priority}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 ml-4">
+                                  {isEditing ? (
+                                    <>
+                                      <button
+                                        onClick={() => handleSaveMapping(mapping.id, model.id)}
+                                        className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                                      >
+                                        保存
+                                      </button>
+                                      <button
+                                        onClick={handleCancelEditMapping}
+                                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                                      >
+                                        取消
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => handleEditMapping(mapping)}
+                                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                                      >
+                                        编辑
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const providerName = providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`;
+                                          handleDeleteMapping(mapping.id, model.id, providerName, mapping.target_model);
+                                        }}
+                                        disabled={deletingMappingId === mapping.id}
+                                        className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
+                                          deletingMappingId === mapping.id ? 'opacity-50 cursor-not-allowed' : ''
+                                        }`}
+                                        title={deletingMappingId === mapping.id ? '正在删除...' : '删除映射'}
+                                      >
+                                        {deletingMappingId === mapping.id ? '删除中...' : '删除'}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  const providerName = providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`;
-                                  handleDeleteMapping(mapping.id, model.id, providerName, mapping.target_model);
-                                }}
-                                disabled={deletingMappingId === mapping.id}
-                                className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
-                                  deletingMappingId === mapping.id ? 'opacity-50 cursor-not-allowed' : ''
-                                }`}
-                                title={deletingMappingId === mapping.id ? '正在删除...' : '删除映射'}
-                              >
-                                {deletingMappingId === mapping.id ? '删除中...' : '删除'}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="text-center py-8 text-gray-500">
@@ -623,9 +726,9 @@ function AddMappingModal({
   selectedProviderId: number | null;
   availableModels: AvailableModelsResponse | null;
   loadingModels: boolean;
-  mappingForm: { target_model: string; weight: number; priority: number };
+  mappingForm: { target_model: string };
   onSelectProvider: (id: number) => void;
-  onChangeMappingForm: (form: { target_model: string; weight: number; priority: number }) => void;
+  onChangeMappingForm: (form: { target_model: string }) => void;
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
 }) {
@@ -689,40 +792,6 @@ function AddMappingModal({
                   ))}
                 </div>
               ) : null}
-            </div>
-          )}
-
-          {/* Step 3: 配置参数 */}
-          {mappingForm.target_model && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">3. 配置映射参数</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  权重 (1-100)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={mappingForm.weight}
-                  onChange={(e) => onChangeMappingForm({ ...mappingForm, weight: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">负载均衡时的权重值</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  优先级 (≥1)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={mappingForm.priority}
-                  onChange={(e) => onChangeMappingForm({ ...mappingForm, priority: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="mt-1 text-xs text-gray-500">数字越小优先级越高</p>
-              </div>
             </div>
           )}
 
