@@ -1,3 +1,6 @@
 [submodule "ref_proj/claude-code-nexus"]
 	path = ref_proj/claude-code-nexus
 	url = https://github.com/KroMiose/claude-code-nexus.git
+[submodule "ref_proj/claude-code-router"]
+	path = ref_proj/claude-code-router
+	url = https://github.com/musistudio/claude-code-router.git
