@@ -153,8 +153,6 @@ func (h *MappingHandler) handleMappingError(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, mapping.ErrMappingExists):
 		return http.StatusConflict
-	case errors.Is(err, mapping.ErrPriorityExists):
-		return http.StatusConflict
 	case errors.Is(err, mapping.ErrInvalidWeight):
 		return http.StatusBadRequest
 	case errors.Is(err, mapping.ErrInvalidPriority):

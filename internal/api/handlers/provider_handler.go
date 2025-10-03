@@ -540,3 +540,114 @@ func (h *ProviderHandler) GetAvailableModels(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// TestProviderModel 测试供应商的特定模型
+// @Summary 测试供应商的特定模型
+// @Tags providers
+// @Accept json
+// @Produce json
+// @Param id path int true "供应商 ID"
+// @Param request body TestModelRequest true "测试模型请求"
+// @Success 200 {object} ModelTestResponse
+// @Failure 400 {object} provider.ErrorResponse
+// @Failure 404 {object} provider.ErrorResponse
+// @Router /api/providers/{id}/test-model [post]
+func (h *ProviderHandler) TestProviderModel(c *gin.Context) {
+	// 解析 ID
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INVALID_ID",
+				Message: "Invalid provider ID",
+			},
+		})
+		return
+	}
+
+	var req TestModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "VALIDATION_ERROR",
+				Message: "Invalid request parameters",
+				Details: err.Error(),
+			},
+		})
+		return
+	}
+
+	// 查询供应商
+	prov, err := h.service.GetProvider(uint(id))
+	if err != nil {
+		if errors.Is(err, provider.ErrProviderNotFound) {
+			c.JSON(http.StatusNotFound, provider.ErrorResponse{
+				Error: provider.ErrorDetail{
+					Code:    "NOT_FOUND",
+					Message: "Provider not found",
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "INTERNAL_ERROR",
+				Message: "Failed to get provider",
+			},
+		})
+		return
+	}
+
+	// 执行模型测试
+	healthChecker := provider.NewHealthChecker(15 * time.Second)
+	startTime := time.Now()
+
+	checkResult, err := healthChecker.CheckHealthSimple(prov.BaseURL, prov.APIKey, req.ModelName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
+			Error: provider.ErrorDetail{
+				Code:    "TEST_FAILED",
+				Message: "模型测试执行失败",
+				Details: err.Error(),
+			},
+		})
+		return
+	}
+
+	// 记录测试结果
+	if !checkResult.Healthy {
+		log.Printf("模型测试失败 [Provider: %s (ID: %d), Model: %s] StatusCode: %d, Error: %s, ResponseTime: %dms",
+			prov.Name, prov.ID, req.ModelName, checkResult.StatusCode, checkResult.Error, checkResult.ResponseTimeMs)
+	} else {
+		log.Printf("模型测试成功 [Provider: %s (ID: %d), Model: %s] ResponseTime: %dms",
+			prov.Name, prov.ID, req.ModelName, checkResult.ResponseTimeMs)
+	}
+
+	c.JSON(http.StatusOK, ModelTestResponse{
+		ProviderID:     prov.ID,
+		ProviderName:   prov.Name,
+		ModelName:      req.ModelName,
+		Success:        checkResult.Healthy,
+		ResponseTimeMs: int(checkResult.ResponseTimeMs),
+		StatusCode:     checkResult.StatusCode,
+		Error:          checkResult.Error,
+		TestedAt:       startTime,
+	})
+}
+
+// TestModelRequest 测试模型请求
+type TestModelRequest struct {
+	ModelName string `json:"model_name" binding:"required"`
+}
+
+// ModelTestResponse 模型测试响应
+type ModelTestResponse struct {
+	ProviderID     uint      `json:"provider_id"`
+	ProviderName   string    `json:"provider_name"`
+	ModelName      string    `json:"model_name"`
+	Success        bool      `json:"success"`
+	ResponseTimeMs int       `json:"response_time_ms"`
+	StatusCode     int       `json:"status_code,omitempty"`
+	Error          string    `json:"error,omitempty"`
+	TestedAt       time.Time `json:"tested_at"`
+}
