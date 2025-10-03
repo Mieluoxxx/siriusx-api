@@ -91,7 +91,7 @@ func TestProviderCRUD(t *testing.T) {
 		BaseURL:      "https://test.example.com",
 		APIKey:       "test-api-key",
 		Enabled:      true,
-		Priority:     50,
+		TestModel:    "gpt-3.5-turbo",
 		HealthStatus: "unknown",
 	}
 
@@ -116,7 +116,7 @@ func TestProviderCRUD(t *testing.T) {
 	}
 
 	// Update
-	found.Priority = 100
+	found.TestModel = "gpt-4"
 	result = db.Save(&found)
 	if result.Error != nil {
 		t.Fatalf("更新 Provider 失败: %v", result.Error)
@@ -124,8 +124,8 @@ func TestProviderCRUD(t *testing.T) {
 
 	var updated models.Provider
 	db.First(&updated, provider.ID)
-	if updated.Priority != 100 {
-		t.Errorf("Provider 优先级未更新: got %d, want 100", updated.Priority)
+	if updated.TestModel != "gpt-4" {
+		t.Errorf("Provider 测试模型未更新: got %s, want gpt-4", updated.TestModel)
 	}
 
 	// Delete

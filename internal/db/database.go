@@ -60,7 +60,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.UnifiedModel{},
 		&models.ModelMapping{},
 		&models.Token{},
-		&models.SystemEvent{},
 	)
 
 	if err != nil {
@@ -72,7 +71,56 @@ func AutoMigrate(db *gorm.DB) error {
 	log.Println("   - unified_models 表")
 	log.Println("   - model_mappings 表")
 	log.Println("   - tokens 表")
-	log.Println("   - system_events 表")
+
+	// 初始化默认数据
+	if err := initDefaultData(db); err != nil {
+		return fmt.Errorf("初始化默认数据失败: %w", err)
+	}
+
+	return nil
+}
+
+// initDefaultData 初始化默认数据
+func initDefaultData(db *gorm.DB) error {
+	// 检查是否已存在模型数据
+	var count int64
+	db.Model(&models.UnifiedModel{}).Count(&count)
+
+	if count > 0 {
+		log.Println("📋 数据库已有数据，跳过默认数据初始化")
+		return nil
+	}
+
+	log.Println("🔧 初始化默认模型数据...")
+
+	// 定义默认 Claude Code 模型列表
+	defaultModels := []models.UnifiedModel{
+		{
+			Name:        "claude-3-5-haiku-20241022",
+			DisplayName: "claude-3-5-haiku-20241022",
+			Description: "ClaudeCode默认haiku模型",
+		},
+		{
+			Name:        "claude-sonnet-4-5-20250929",
+			DisplayName: "claude-sonnet-4-5-20250929",
+			Description: "ClaudeCode默认sonnet模型",
+		},
+		{
+			Name:        "claude-opus-4-1-20250805",
+			DisplayName: "claude-opus-4-1-20250805",
+			Description: "ClaudeCode默认opus模型",
+		},
+	}
+
+	// 批量创建默认模型
+	if err := db.Create(&defaultModels).Error; err != nil {
+		return fmt.Errorf("创建默认模型失败: %w", err)
+	}
+
+	log.Printf("✅ 已创建 %d 个默认模型:", len(defaultModels))
+	for _, model := range defaultModels {
+		log.Printf("   - %s (%s)", model.Name, model.Description)
+	}
 
 	return nil
 }
