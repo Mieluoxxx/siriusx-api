@@ -347,7 +347,7 @@ func (h *ProxyHandler) forwardRequest(c *gin.Context, prov *models.Provider, req
 
 	// 发送请求
 	client := &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout: 300 * time.Second, // 5分钟超时，增加对网络延迟的容忍度
 	}
 
 	resp, err := client.Do(proxyReq)
@@ -640,7 +640,7 @@ func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provi
 		}
 	}
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second} // 5分钟超时，增加对网络延迟的容忍度
 	resp, err := client.Do(proxyReq)
 	if err != nil {
 		log.Printf("❌ [转发失败] Provider: %s, 错误: %v", prov.Name, err)
