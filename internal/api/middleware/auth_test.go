@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,7 +61,7 @@ func TestTokenAuthMiddleware_Success(t *testing.T) {
 	router, service, _ := setupAuthTestEnv(t)
 
 	// 创建有效 Token
-	tok, _ := service.CreateToken("Test Token", nil)
+	tok, _ := service.CreateToken("Test Token", nil, "")
 
 	// 发送请求
 	req, _ := http.NewRequest("GET", "/protected/resource", nil)
@@ -150,7 +151,7 @@ func TestTokenAuthMiddleware_DisabledToken(t *testing.T) {
 	router, service, db := setupAuthTestEnv(t)
 
 	// 创建 Token 并禁用
-	tok, _ := service.CreateToken("Disabled Token", nil)
+	tok, _ := service.CreateToken("Disabled Token", nil, "")
 	db.Model(&models.Token{}).Where("id = ?", tok.ID).Update("enabled", false)
 
 	req, _ := http.NewRequest("GET", "/protected/resource", nil)
@@ -202,7 +203,7 @@ func TestTokenAuthMiddleware_ContextData(t *testing.T) {
 	router, service, _ := setupAuthTestEnv(t)
 
 	// 创建有效 Token
-	tok, _ := service.CreateToken("Test Token", nil)
+	tok, _ := service.CreateToken("Test Token", nil, "")
 
 	// 发送请求
 	req, _ := http.NewRequest("GET", "/protected/resource", nil)
@@ -224,14 +225,5 @@ func TestTokenAuthMiddleware_ContextData(t *testing.T) {
 
 // contains 检查字符串是否包含子串
 func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) >= len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsSubstring(s, substr)))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
 }

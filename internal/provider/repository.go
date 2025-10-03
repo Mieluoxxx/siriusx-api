@@ -86,9 +86,9 @@ func (r *Repository) UpdateHealthStatus(id uint, healthStatus string) error {
 	return r.db.Model(&models.Provider{}).Where("id = ?", id).Update("health_status", healthStatus).Error
 }
 
-// SoftDelete 软删除供应商（设置 enabled = false）
-func (r *Repository) SoftDelete(id uint) error {
-	result := r.db.Model(&models.Provider{}).Where("id = ?", id).Update("enabled", false)
+// Delete 删除供应商（硬删除）
+func (r *Repository) Delete(id uint) error {
+	result := r.db.Delete(&models.Provider{}, id)
 	if result.Error != nil {
 		return result.Error
 	}

@@ -13,13 +13,17 @@ import (
 func TestHealthChecker_CheckHealth_Success(t *testing.T) {
 	// 创建模拟服务器
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 验证请求方法和路径
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+
 		// 验证请求头
-		assert.Equal(t, "GET", r.Method)
-		assert.NotEmpty(t, r.Header.Get("x-api-key"))
+		assert.Equal(t, "Bearer test-api-key", r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		// 返回成功响应
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"models": []}`))
+		w.Write([]byte(`{"choices": []}`))
 	}))
 	defer server.Close()
 
@@ -27,7 +31,7 @@ func TestHealthChecker_CheckHealth_Success(t *testing.T) {
 	checker := NewHealthChecker(5 * time.Second)
 
 	// 执行健康检查
-	result, err := checker.CheckHealthSimple(server.URL, "test-api-key")
+	result, err := checker.CheckHealthSimple(server.URL, "test-api-key", "gpt-3.5-turbo")
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.True(t, result.Healthy)
@@ -43,7 +47,7 @@ func TestHealthChecker_CheckHealth_Failure(t *testing.T) {
 	defer server.Close()
 
 	checker := NewHealthChecker(5 * time.Second)
-	result, err := checker.CheckHealthSimple(server.URL, "invalid-key")
+	result, err := checker.CheckHealthSimple(server.URL, "invalid-key", "gpt-3.5-turbo")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -61,7 +65,7 @@ func TestHealthChecker_CheckHealth_Timeout(t *testing.T) {
 
 	// 使用短超时
 	checker := NewHealthChecker(500 * time.Millisecond)
-	result, err := checker.CheckHealthSimple(server.URL, "test-key")
+	result, err := checker.CheckHealthSimple(server.URL, "test-key", "gpt-3.5-turbo")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -81,14 +85,14 @@ func TestHealthChecker_CheckHealth_WithContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	result, err := checker.CheckHealth(ctx, server.URL, "test-key")
+	result, err := checker.CheckHealth(ctx, server.URL, "test-key", "gpt-3.5-turbo")
 	assert.NoError(t, err)
 	assert.True(t, result.Healthy)
 }
 
 func TestHealthChecker_CheckHealth_InvalidURL(t *testing.T) {
 	checker := NewHealthChecker(5 * time.Second)
-	result, err := checker.CheckHealthSimple("http://invalid-url-that-does-not-exist-12345.com", "test-key")
+	result, err := checker.CheckHealthSimple("http://invalid-url-that-does-not-exist-12345.com", "test-key", "gpt-3.5-turbo")
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)

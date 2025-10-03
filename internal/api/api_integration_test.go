@@ -36,51 +36,16 @@ func setupAPITestEnv(t *testing.T) (*gin.Engine, *gorm.DB) {
 	return router, database
 }
 
-// TestAPI_Stats 测试统计 API
-func TestAPI_Stats(t *testing.T) {
-	router, database := setupAPITestEnv(t)
-	_ = database // 使用 database 创建测试数据
-
-	// 创建测试供应商数据
-	database.Exec("INSERT INTO providers (name, base_url, api_key, enabled, priority, health_status) VALUES (?, ?, ?, ?, ?, ?)",
-		"Test Provider 1", "https://api.test1.com", "sk-test1", true, 80, "healthy")
-	database.Exec("INSERT INTO providers (name, base_url, api_key, enabled, priority, health_status) VALUES (?, ?, ?, ?, ?, ?)",
-		"Test Provider 2", "https://api.test2.com", "sk-test2", true, 70, "healthy")
-	database.Exec("INSERT INTO providers (name, base_url, api_key, enabled, priority, health_status) VALUES (?, ?, ?, ?, ?, ?)",
-		"Test Provider 3", "https://api.test3.com", "sk-test3", false, 60, "unhealthy")
-
-	// 发送 GET /api/stats 请求
-	req := httptest.NewRequest("GET", "/api/stats", nil)
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-
-	// 验证响应
-	assert.Equal(t, http.StatusOK, resp.Code)
-
-	var stats map[string]interface{}
-	err := json.Unmarshal(resp.Body.Bytes(), &stats)
-	require.NoError(t, err)
-
-	// 验证供应商统计
-	providers := stats["providers"].(map[string]interface{})
-	assert.Equal(t, float64(3), providers["total"])
-	assert.Equal(t, float64(2), providers["healthy"])
-	assert.Equal(t, float64(1), providers["unhealthy"])
-
-	t.Log("✅ Stats API 返回正确的供应商统计")
-}
-
 // TestAPI_HealthCheck 测试健康检查 API
 func TestAPI_HealthCheck(t *testing.T) {
 	router, _ := setupAPITestEnv(t)
 
 	// 创建测试供应商
-	priority := 80
 	createReq := provider.CreateProviderRequest{
-		Name:     "Health Test Provider",
-		BaseURL:  "https://api.health-test.com",
-		APIKey:   "sk-health-test",
-		Priority: &priority,
+		Name:      "Health Test Provider",
+		BaseURL:   "https://api.health-test.com",
+		APIKey:    "sk-health-test",
+		TestModel: "gpt-3.5-turbo",
 	}
 	body, _ := json.Marshal(createReq)
 
@@ -117,12 +82,11 @@ func TestAPI_ToggleEnabled(t *testing.T) {
 	router, _ := setupAPITestEnv(t)
 
 	// 创建测试供应商
-	priority := 80
 	createReq := provider.CreateProviderRequest{
-		Name:     "Toggle Test Provider",
-		BaseURL:  "https://api.toggle-test.com",
-		APIKey:   "sk-toggle-test",
-		Priority: &priority,
+		Name:      "Toggle Test Provider",
+		BaseURL:   "https://api.toggle-test.com",
+		APIKey:    "sk-toggle-test",
+		TestModel: "gpt-3.5-turbo",
 	}
 	body, _ := json.Marshal(createReq)
 
@@ -180,8 +144,8 @@ func TestAPI_ToggleEnabled(t *testing.T) {
 func TestAPI_CORS(t *testing.T) {
 	router, _ := setupAPITestEnv(t)
 
-	// 发送 OPTIONS 预检请求
-	req := httptest.NewRequest("OPTIONS", "/api/stats", nil)
+	// 发送 OPTIONS 预检请求（使用健康检查端点）
+	req := httptest.NewRequest("OPTIONS", "/health", nil)
 	req.Header.Set("Origin", "http://localhost:4321")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	resp := httptest.NewRecorder()

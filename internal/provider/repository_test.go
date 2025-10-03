@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Mieluoxxx/Siriusx-API/internal/models"
@@ -29,11 +30,11 @@ func TestRepository_Create(t *testing.T) {
 	repo := NewRepository(db)
 
 	provider := &models.Provider{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
-		Enabled: true,
-		Priority: 50,
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		Enabled:   true,
+		TestModel: "gpt-3.5-turbo",
 	}
 
 	err := repo.Create(provider)
@@ -112,7 +113,7 @@ func TestRepository_FindAll(t *testing.T) {
 	// 创建测试数据
 	for i := 0; i < 25; i++ {
 		provider := &models.Provider{
-			Name:    "Provider " + string(rune('A'+i)),
+			Name:    fmt.Sprintf("Provider %c", 'A'+i),
 			BaseURL: "https://api.test.com",
 			APIKey:  "sk-test-key",
 		}
@@ -148,16 +149,16 @@ func TestRepository_Update(t *testing.T) {
 
 	// 创建测试数据
 	provider := &models.Provider{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
-		Priority: 50,
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	repo.Create(provider)
 
 	// 更新数据
 	provider.Name = "Updated Provider"
-	provider.Priority = 80
+	provider.TestModel = "gpt-4"
 	err := repo.Update(provider)
 	if err != nil {
 		t.Errorf("Update() failed: %v", err)
@@ -168,13 +169,13 @@ func TestRepository_Update(t *testing.T) {
 	if updated.Name != "Updated Provider" {
 		t.Errorf("Update() name not updated, got %v", updated.Name)
 	}
-	if updated.Priority != 80 {
-		t.Errorf("Update() priority not updated, got %v", updated.Priority)
+	if updated.TestModel != "gpt-4" {
+		t.Errorf("Update() test model not updated, got %v", updated.TestModel)
 	}
 }
 
-// TestRepository_SoftDelete 测试软删除
-func TestRepository_SoftDelete(t *testing.T) {
+// TestRepository_Delete 测试硬删除
+func TestRepository_Delete(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewRepository(db)
 
@@ -187,22 +188,22 @@ func TestRepository_SoftDelete(t *testing.T) {
 	}
 	repo.Create(provider)
 
-	// 软删除
-	err := repo.SoftDelete(provider.ID)
+	// 硬删除
+	err := repo.Delete(provider.ID)
 	if err != nil {
-		t.Errorf("SoftDelete() failed: %v", err)
+		t.Errorf("Delete() failed: %v", err)
 	}
 
-	// 验证软删除（enabled 应为 false）
-	deleted, _ := repo.FindByID(provider.ID)
-	if deleted.Enabled {
-		t.Error("SoftDelete() did not set enabled to false")
+	// 验证硬删除（记录应该不存在）
+	_, err = repo.FindByID(provider.ID)
+	if err != ErrProviderNotFound {
+		t.Error("Delete() did not remove the record from database")
 	}
 
 	// 测试删除不存在的供应商
-	err = repo.SoftDelete(9999)
+	err = repo.Delete(9999)
 	if err != ErrProviderNotFound {
-		t.Errorf("SoftDelete() with non-existent ID should return ErrProviderNotFound, got %v", err)
+		t.Errorf("Delete() with non-existent ID should return ErrProviderNotFound, got %v", err)
 	}
 }
 

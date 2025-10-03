@@ -47,9 +47,10 @@ func TestService_CreateProvider_WithEncryption(t *testing.T) {
 	service := setupTestServiceWithEncryption(t, encryptionKey)
 
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 
 	// 创建供应商
@@ -90,9 +91,10 @@ func TestService_GetProvider_WithEncryption(t *testing.T) {
 
 	// 创建供应商
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -115,9 +117,10 @@ func TestService_UpdateProvider_WithEncryption(t *testing.T) {
 
 	// 创建供应商
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -164,9 +167,10 @@ func TestService_UpdateProvider_WithoutAPIKeyChange(t *testing.T) {
 
 	// 创建供应商
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -196,9 +200,10 @@ func TestService_Encryption_NoKey(t *testing.T) {
 	service := NewService(repo) // 不传加密密钥
 
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 
 	// 创建供应商
@@ -226,9 +231,10 @@ func TestService_Encryption_DifferentKeys(t *testing.T) {
 
 	// 使用 key1 创建供应商
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service1.CreateProvider(req)
 

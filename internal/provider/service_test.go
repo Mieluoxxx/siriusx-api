@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/Mieluoxxx/Siriusx-API/internal/models"
@@ -29,9 +30,10 @@ func TestService_CreateProvider_Success(t *testing.T) {
 	service := setupTestService(t)
 
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 
 	provider, err := service.CreateProvider(req)
@@ -41,8 +43,8 @@ func TestService_CreateProvider_Success(t *testing.T) {
 	if provider.Name != req.Name {
 		t.Errorf("CreateProvider() got name = %v, want %v", provider.Name, req.Name)
 	}
-	if provider.Priority != 50 {
-		t.Errorf("CreateProvider() default priority should be 50, got %v", provider.Priority)
+	if provider.TestModel != "gpt-3.5-turbo" {
+		t.Errorf("CreateProvider() test model should be gpt-3.5-turbo, got %v", provider.TestModel)
 	}
 }
 
@@ -51,13 +53,12 @@ func TestService_CreateProvider_WithOptionalFields(t *testing.T) {
 	service := setupTestService(t)
 
 	enabled := false
-	priority := 80
 	req := CreateProviderRequest{
-		Name:     "Test Provider",
-		BaseURL:  "https://api.test.com",
-		APIKey:   "sk-test-key",
-		Enabled:  &enabled,
-		Priority: &priority,
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
+		Enabled:   &enabled,
 	}
 
 	provider, err := service.CreateProvider(req)
@@ -66,9 +67,6 @@ func TestService_CreateProvider_WithOptionalFields(t *testing.T) {
 	}
 	if provider.Enabled != false {
 		t.Errorf("CreateProvider() enabled should be false, got %v", provider.Enabled)
-	}
-	if provider.Priority != 80 {
-		t.Errorf("CreateProvider() priority should be 80, got %v", provider.Priority)
 	}
 }
 
@@ -136,34 +134,6 @@ func TestService_CreateProvider_EmptyAPIKey(t *testing.T) {
 	}
 }
 
-// TestService_CreateProvider_InvalidPriority 测试创建供应商（无效优先级）
-func TestService_CreateProvider_InvalidPriority(t *testing.T) {
-	service := setupTestService(t)
-
-	testCases := []struct {
-		name     string
-		priority int
-	}{
-		{"priority too low", 0},
-		{"priority too high", 101},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := CreateProviderRequest{
-				Name:     "Test Provider",
-				BaseURL:  "https://api.test.com",
-				APIKey:   "sk-test-key",
-				Priority: &tc.priority,
-			}
-
-			_, err := service.CreateProvider(req)
-			if err == nil {
-				t.Errorf("CreateProvider() with %s should fail", tc.name)
-			}
-		})
-	}
-}
 
 // TestService_CreateProvider_DuplicateName 测试创建重复名称的供应商
 func TestService_CreateProvider_DuplicateName(t *testing.T) {
@@ -171,9 +141,10 @@ func TestService_CreateProvider_DuplicateName(t *testing.T) {
 
 	// 创建第一个供应商
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	service.CreateProvider(req)
 
@@ -190,9 +161,10 @@ func TestService_GetProvider(t *testing.T) {
 
 	// 创建测试数据
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -219,9 +191,10 @@ func TestService_ListProviders(t *testing.T) {
 	// 创建测试数据
 	for i := 0; i < 15; i++ {
 		req := CreateProviderRequest{
-			Name:    "Provider " + string(rune('A'+i)),
-			BaseURL: "https://api.test.com",
-			APIKey:  "sk-test-key",
+			Name:      fmt.Sprintf("Provider %c", 'A'+i),
+			BaseURL:   "https://api.test.com",
+			APIKey:    "sk-test-key",
+			TestModel: "gpt-3.5-turbo",
 		}
 		service.CreateProvider(req)
 	}
@@ -282,20 +255,21 @@ func TestService_UpdateProvider_Success(t *testing.T) {
 
 	// 创建测试数据
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
 	// 更新数据
 	newName := "Updated Provider"
 	newURL := "https://api.updated.com"
-	newPriority := 80
+	newTestModel := "gpt-4"
 	updateReq := UpdateProviderRequest{
-		Name:     &newName,
-		BaseURL:  &newURL,
-		Priority: &newPriority,
+		Name:      &newName,
+		BaseURL:   &newURL,
+		TestModel: &newTestModel,
 	}
 
 	updated, err := service.UpdateProvider(created.ID, updateReq)
@@ -308,8 +282,8 @@ func TestService_UpdateProvider_Success(t *testing.T) {
 	if updated.BaseURL != newURL {
 		t.Errorf("UpdateProvider() base_url not updated, got %v", updated.BaseURL)
 	}
-	if updated.Priority != newPriority {
-		t.Errorf("UpdateProvider() priority not updated, got %v", updated.Priority)
+	if updated.TestModel != newTestModel {
+		t.Errorf("UpdateProvider() test model not updated, got %v", updated.TestModel)
 	}
 }
 
@@ -334,16 +308,18 @@ func TestService_UpdateProvider_DuplicateName(t *testing.T) {
 
 	// 创建两个供应商
 	req1 := CreateProviderRequest{
-		Name:    "Provider 1",
-		BaseURL: "https://api1.test.com",
-		APIKey:  "sk-test-key-1",
+		Name:      "Provider 1",
+		BaseURL:   "https://api1.test.com",
+		APIKey:    "sk-test-key-1",
+		TestModel: "gpt-3.5-turbo",
 	}
 	provider1, _ := service.CreateProvider(req1)
 
 	req2 := CreateProviderRequest{
-		Name:    "Provider 2",
-		BaseURL: "https://api2.test.com",
-		APIKey:  "sk-test-key-2",
+		Name:      "Provider 2",
+		BaseURL:   "https://api2.test.com",
+		APIKey:    "sk-test-key-2",
+		TestModel: "gpt-3.5-turbo",
 	}
 	provider2, _ := service.CreateProvider(req2)
 
@@ -376,9 +352,10 @@ func TestService_UpdateProvider_EmptyName(t *testing.T) {
 
 	// 创建测试数据
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -400,9 +377,10 @@ func TestService_DeleteProvider(t *testing.T) {
 
 	// 创建测试数据
 	req := CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "gpt-3.5-turbo",
 	}
 	created, _ := service.CreateProvider(req)
 
@@ -412,10 +390,10 @@ func TestService_DeleteProvider(t *testing.T) {
 		t.Errorf("DeleteProvider() failed: %v", err)
 	}
 
-	// 验证软删除（数据仍然存在但 enabled = false）
-	deleted, _ := service.GetProvider(created.ID)
-	if deleted.Enabled {
-		t.Error("DeleteProvider() should set enabled to false")
+	// 验证硬删除（记录应该不存在）
+	_, err = service.GetProvider(created.ID)
+	if err != ErrProviderNotFound {
+		t.Error("DeleteProvider() should remove the record from database")
 	}
 
 	// 测试删除不存在的供应商

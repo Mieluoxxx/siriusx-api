@@ -206,9 +206,9 @@ func (s *Service) UpdateProvider(id uint, req UpdateProviderRequest) (*models.Pr
 	return provider, nil
 }
 
-// DeleteProvider 删除供应商（软删除）
+// DeleteProvider 删除供应商（硬删除）
 func (s *Service) DeleteProvider(id uint) error {
-	return s.repo.SoftDelete(id)
+	return s.repo.Delete(id)
 }
 
 // UpdateProviderHealthStatus 更新供应商健康状态

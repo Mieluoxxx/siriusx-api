@@ -77,12 +77,11 @@ func TestEpic3_IntegrationFlow(t *testing.T) {
 
 	t.Run("Story 3.1 & 3.2: Complete Provider Lifecycle with Encryption", func(t *testing.T) {
 		// === Step 1: 创建供应商 ===
-		priority := 80
 		createReq := provider.CreateProviderRequest{
-			Name:     "OneAPI Provider",
-			BaseURL:  "https://api.oneapi.com",
-			APIKey:   "sk-test-key-12345",
-			Priority: &priority,
+			Name:      "OneAPI Provider",
+			BaseURL:   "https://api.oneapi.com",
+			APIKey:    "sk-test-key-12345",
+			TestModel: "gpt-3.5-turbo",
 		}
 
 		createBody, _ := json.Marshal(createReq)
