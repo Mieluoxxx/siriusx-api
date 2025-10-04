@@ -67,13 +67,13 @@ func setupProxyRoutes(group *gin.RouterGroup, db *gorm.DB, encryptionKey []byte)
 	}
 
 	mappingRepo := mapping.NewRepository(db)
-	mappingService := mapping.NewService(mappingRepo)
+	mappingRouter := mapping.NewRouter(mappingRepo, nil)
 
 	tokenRepo := token.NewRepository(db)
 	tokenService := token.NewService(tokenRepo)
 
 	// 创建代理处理器
-	proxyHandler := handlers.NewProxyHandler(providerService, mappingService)
+	proxyHandler := handlers.NewProxyHandler(providerService, mappingRouter)
 
 	// 注册路由（需要 Token 验证）
 	group.POST("/chat/completions",

@@ -3,16 +3,18 @@ package handlers
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/Mieluoxxx/Siriusx-API/internal/balancer"
 	"github.com/Mieluoxxx/Siriusx-API/internal/converter"
 	"github.com/Mieluoxxx/Siriusx-API/internal/mapping"
 	"github.com/Mieluoxxx/Siriusx-API/internal/models"
@@ -23,179 +25,196 @@ import (
 // ProxyHandler 代理请求处理器
 type ProxyHandler struct {
 	providerService *provider.Service
-	mappingService  *mapping.Service
+	router          mapping.Router
+	balancer        balancer.LoadBalancer
 }
 
 // NewProxyHandler 创建代理处理器
-func NewProxyHandler(providerService *provider.Service, mappingService *mapping.Service) *ProxyHandler {
+func NewProxyHandler(providerService *provider.Service, router mapping.Router) *ProxyHandler {
 	return &ProxyHandler{
 		providerService: providerService,
-		mappingService:  mappingService,
+		router:          router,
+		balancer:        balancer.NewWeightedRandomBalancer(),
 	}
 }
 
-// ChatCompletionRequest OpenAI 聊天完成请求
-type ChatCompletionRequest struct {
-	Model    string      `json:"model" binding:"required"`
-	Messages interface{} `json:"messages" binding:"required"`
-	Stream   bool        `json:"stream"`
-	// 其他字段保持原样传递
+// parseJSONBody 读取并解析请求体
+func parseJSONBody(c *gin.Context) (map[string]interface{}, []byte, error) {
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// 恢复请求体，便于后续中间件或日志使用
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		return nil, bodyBytes, err
+	}
+
+	return payload, bodyBytes, nil
+}
+
+// resolveMapping 使用路由器解析模型映射并选择供应商
+func (h *ProxyHandler) resolveMapping(ctx context.Context, modelName string) (*mapping.ResolvedMapping, error) {
+	mappings, err := h.router.ResolveModel(ctx, modelName)
+	if err != nil {
+		return nil, err
+	}
+
+	selected := h.balancer.SelectProvider(mappings)
+	if selected == nil {
+		return nil, mapping.NewNoAvailableProvidersError(modelName)
+	}
+
+	return selected, nil
+}
+
+// handleOpenAIRouterError 将路由错误映射为 OpenAI 风格的响应
+func (h *ProxyHandler) handleOpenAIRouterError(c *gin.Context, err error) bool {
+	var routerErr *mapping.RouterError
+	if !errors.As(err, &routerErr) {
+		return false
+	}
+
+	switch routerErr.Code {
+	case mapping.ErrRouterModelNotFound.Code:
+		c.JSON(http.StatusNotFound, gin.H{"error": routerErr.Message})
+	case mapping.ErrRouterNoAvailableProviders.Code:
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": routerErr.Message})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": routerErr.Message})
+	}
+
+	return true
+}
+
+// handleClaudeRouterError 将路由错误映射为 Claude 风格的响应
+func (h *ProxyHandler) handleClaudeRouterError(c *gin.Context, err error) bool {
+	var routerErr *mapping.RouterError
+	if !errors.As(err, &routerErr) {
+		return false
+	}
+
+	switch routerErr.Code {
+	case mapping.ErrRouterModelNotFound.Code:
+		h.respondClaudeError(c, http.StatusNotFound, "not_found_error", routerErr.Message)
+	case mapping.ErrRouterNoAvailableProviders.Code:
+		h.respondClaudeError(c, http.StatusServiceUnavailable, "overloaded_error", routerErr.Message)
+	default:
+		h.respondClaudeError(c, http.StatusInternalServerError, "api_error", routerErr.Message)
+	}
+
+	return true
 }
 
 // ChatCompletions 处理聊天完成请求
 func (h *ProxyHandler) ChatCompletions(c *gin.Context) {
-	// 1. 解析请求体
-	var req map[string]interface{}
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	req, bodyBytes, err := parseJSONBody(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无法读取请求体"})
-		return
-	}
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 JSON 格式"})
+		if bodyBytes == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无法读取请求体"})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 JSON 格式"})
+		}
 		return
 	}
 
-	// 2. 获取模型名称
 	modelName, ok := req["model"].(string)
 	if !ok || modelName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 model 参数"})
 		return
 	}
 
-	// 📝 记录接收到的请求
 	log.Printf("📥 [ChatCompletions] 收到请求 - 模型: %s, IP: %s", modelName, c.ClientIP())
 
-	// 3. 查找统一模型
-	unifiedModel, err := h.mappingService.GetModelByName(modelName)
+	selectedMapping, err := h.resolveMapping(c.Request.Context(), modelName)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": fmt.Sprintf("未找到模型: %s", modelName),
-		})
+		if h.handleOpenAIRouterError(c, err) {
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解析模型映射失败"})
 		return
 	}
 
-	// 4. 获取该模型的所有映射
-	mappings, err := h.mappingService.GetMappingsByModelID(unifiedModel.ID)
-	if err != nil || len(mappings) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": fmt.Sprintf("模型 %s 没有可用的映射", modelName),
-		})
-		return
-	}
-
-	// 5. 选择一个可用的映射（负载均衡）
-	selectedMapping := h.selectMapping(mappings)
-	if selectedMapping == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "没有可用的供应商",
-		})
-		return
-	}
-
-	// 6. 获取供应商信息
 	prov, err := h.providerService.GetProvider(selectedMapping.ProviderID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "获取供应商信息失败",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取供应商信息失败"})
 		return
 	}
 
-	// 7. 替换模型名称
 	req["model"] = selectedMapping.TargetModel
-
-	// 8. 清洗请求参数（移除不兼容的字段）
 	h.sanitizeRequest(req, prov.Name)
 
-	// 📝 记录映射选择和转发信息
-	log.Printf("🔀 [ChatCompletions] 映射选择 - 统一模型: %s -> 供应商: %s, 目标模型: %s",
-		modelName, prov.Name, selectedMapping.TargetModel)
+	providerName := prov.Name
+	if selectedMapping.Provider != nil && selectedMapping.Provider.Name != "" {
+		providerName = selectedMapping.Provider.Name
+	}
 
-	// 9. 转发请求到供应商
-	h.forwardRequest(c, prov, req, bodyBytes, "/v1/chat/completions")
+	log.Printf("🔀 [ChatCompletions] 映射选择 - 统一模型: %s -> 供应商: %s, 目标模型: %s",
+		modelName, providerName, selectedMapping.TargetModel)
+
+	h.forwardRequest(c, prov, req, "/v1/chat/completions")
 }
 
 // Messages 处理 Claude Messages API 请求
 func (h *ProxyHandler) Messages(c *gin.Context) {
-	// 1. 解析请求体
-	var req map[string]interface{}
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	req, bodyBytes, err := parseJSONBody(c)
 	if err != nil {
-		h.respondClaudeError(c, http.StatusBadRequest, "invalid_request_error", "无法读取请求体")
-		return
-	}
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		h.respondClaudeError(c, http.StatusBadRequest, "invalid_request_error", "无效的 JSON 格式")
+		if bodyBytes == nil {
+			h.respondClaudeError(c, http.StatusBadRequest, "invalid_request_error", "无法读取请求体")
+		} else {
+			h.respondClaudeError(c, http.StatusBadRequest, "invalid_request_error", "无效的 JSON 格式")
+		}
 		return
 	}
 
-	// 2. 获取模型名称
 	modelName, ok := req["model"].(string)
 	if !ok || modelName == "" {
 		h.respondClaudeError(c, http.StatusBadRequest, "invalid_request_error", "缺少 model 参数")
 		return
 	}
 
-	// 📝 记录接收到的请求
 	log.Printf("📥 [Messages] 收到请求 - 模型: %s, IP: %s", modelName, c.ClientIP())
 
-	// 3. 查找统一模型
-	unifiedModel, err := h.mappingService.GetModelByName(modelName)
+	selectedMapping, err := h.resolveMapping(c.Request.Context(), modelName)
 	if err != nil {
-		h.respondClaudeError(c, http.StatusNotFound, "not_found_error", fmt.Sprintf("未找到模型: %s", modelName))
+		if h.handleClaudeRouterError(c, err) {
+			return
+		}
+		h.respondClaudeError(c, http.StatusInternalServerError, "api_error", "解析模型映射失败")
 		return
 	}
 
-	// 4. 获取该模型的所有映射
-	mappings, err := h.mappingService.GetMappingsByModelID(unifiedModel.ID)
-	if err != nil || len(mappings) == 0 {
-		h.respondClaudeError(c, http.StatusNotFound, "not_found_error", fmt.Sprintf("模型 %s 没有可用的映射", modelName))
-		return
-	}
-
-	// 5. 选择一个可用的映射（负载均衡）
-	selectedMapping := h.selectMapping(mappings)
-	if selectedMapping == nil {
-		h.respondClaudeError(c, http.StatusServiceUnavailable, "overloaded_error", "没有可用的供应商")
-		return
-	}
-
-	// 6. 获取供应商信息
 	prov, err := h.providerService.GetProvider(selectedMapping.ProviderID)
 	if err != nil {
 		h.respondClaudeError(c, http.StatusInternalServerError, "api_error", "获取供应商信息失败")
 		return
 	}
 
-	// 6.1 规范化 Claude 请求，兼容简化格式
 	h.normalizeClaudePayload(req)
 
-	// 6.2 如果上游是 OpenAI 兼容接口，执行 Claude→OpenAI 转换
-	if h.shouldConvertToOpenAI(prov, selectedMapping) {
+	providerName := prov.Name
+	if selectedMapping.Provider != nil && selectedMapping.Provider.Name != "" {
+		providerName = selectedMapping.Provider.Name
+	}
+
+	if h.shouldConvertToOpenAI(prov, selectedMapping.TargetModel) {
 		req["model"] = selectedMapping.TargetModel
 		h.sanitizeRequest(req, prov.Name)
-		log.Printf("🔁 [Messages] 检测到 OpenAI 上游，执行 Claude→OpenAI 转换 [Provider: %s, Target: %s]", prov.Name, selectedMapping.TargetModel)
-		h.forwardClaudeViaOpenAI(c, prov, selectedMapping, req)
+		log.Printf("🔁 [Messages] 检测到 OpenAI 上游，执行 Claude→OpenAI 转换 [Provider: %s, Target: %s]", providerName, selectedMapping.TargetModel)
+		h.forwardClaudeViaOpenAI(c, prov, selectedMapping.TargetModel, req)
 		return
 	}
 
-	// 7. 替换模型名称
 	req["model"] = selectedMapping.TargetModel
-
-	// 8. 清洗请求参数（移除不兼容的字段）
 	h.sanitizeRequest(req, prov.Name)
 
-	// 📝 记录映射选择和转发信息
 	log.Printf("🔀 [Messages] 映射选择 - 统一模型: %s -> 供应商: %s, 目标模型: %s",
-		modelName, prov.Name, selectedMapping.TargetModel)
+		modelName, providerName, selectedMapping.TargetModel)
 
-	// 9. 转发请求到供应商
-	h.forwardRequest(c, prov, req, bodyBytes, "/v1/messages")
+	h.forwardRequest(c, prov, req, "/v1/messages")
 }
 
 // MessagesCountTokens 计算 Claude 请求的 token 用量（本地估算）
@@ -244,52 +263,8 @@ func (h *ProxyHandler) respondClaudeError(c *gin.Context, status int, errorType,
 	})
 }
 
-// selectMapping 选择一个映射（基于权重的负载均衡）
-func (h *ProxyHandler) selectMapping(mappings []*models.ModelMapping) *models.ModelMapping {
-	// 过滤启用的且供应商健康的映射
-	var available []*models.ModelMapping
-	var totalWeight int
-
-	for _, m := range mappings {
-		if !m.Enabled {
-			continue
-		}
-
-		// 检查供应商健康状态
-		prov, err := h.providerService.GetProvider(m.ProviderID)
-		if err != nil || !prov.Enabled || prov.HealthStatus != "healthy" {
-			continue
-		}
-
-		available = append(available, m)
-		totalWeight += m.Weight
-	}
-
-	if len(available) == 0 {
-		return nil
-	}
-
-	// 基于权重随机选择
-	if totalWeight == 0 {
-		// 如果所有权重都是0，随机选择
-		return available[rand.Intn(len(available))]
-	}
-
-	// 加权随机
-	r := rand.Intn(totalWeight)
-	sum := 0
-	for _, m := range available {
-		sum += m.Weight
-		if r < sum {
-			return m
-		}
-	}
-
-	return available[0]
-}
-
 // forwardRequest 转发请求到供应商
-func (h *ProxyHandler) forwardRequest(c *gin.Context, prov *models.Provider, req map[string]interface{}, originalBody []byte, endpoint string) {
+func (h *ProxyHandler) forwardRequest(c *gin.Context, prov *models.Provider, req map[string]interface{}, endpoint string) {
 	// 重新序列化请求体
 	newBody, err := json.Marshal(req)
 	if err != nil {
@@ -573,7 +548,7 @@ func (h *ProxyHandler) forwardRequest(c *gin.Context, prov *models.Provider, req
 }
 
 // forwardClaudeViaOpenAI 将 Claude Messages 请求转换为 OpenAI Chat Completions 请求再转发
-func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provider, mapping *models.ModelMapping, req map[string]interface{}) {
+func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provider, targetModel string, req map[string]interface{}) {
 	payloadBytes, err := json.Marshal(req)
 	if err != nil {
 		log.Printf("❌ [转换失败] 无法序列化 Claude 请求: %v", err)
@@ -593,7 +568,7 @@ func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provi
 		return
 	}
 
-	claudeReq.Model = mapping.TargetModel
+	claudeReq.Model = targetModel
 
 	openaiReq, err := converter.ConvertClaudeToOpenAI(&claudeReq)
 	if err != nil {
@@ -602,7 +577,7 @@ func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provi
 		return
 	}
 
-	openaiReq.Model = mapping.TargetModel
+	openaiReq.Model = targetModel
 
 	openaiBody, err := json.Marshal(openaiReq)
 	if err != nil {
@@ -786,8 +761,8 @@ func (h *ProxyHandler) forwardClaudeViaOpenAI(c *gin.Context, prov *models.Provi
 }
 
 // shouldConvertToOpenAI 判断是否需要将 Claude 请求转换为 OpenAI 兼容请求
-func (h *ProxyHandler) shouldConvertToOpenAI(prov *models.Provider, mapping *models.ModelMapping) bool {
-	target := strings.ToLower(mapping.TargetModel)
+func (h *ProxyHandler) shouldConvertToOpenAI(prov *models.Provider, targetModel string) bool {
+	target := strings.ToLower(targetModel)
 	if strings.Contains(target, "claude") {
 		return false
 	}
