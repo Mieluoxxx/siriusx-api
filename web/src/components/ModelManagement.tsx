@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { api, type UnifiedModel, type ModelMapping, type Provider, type AvailableModelsResponse } from '../lib/api';
 import Toast from './Toast';
+
+type ViewMode = 'card' | 'list' | 'compact';
 
 interface ToastState {
   show: boolean;
@@ -45,6 +47,7 @@ export default function ModelManagement() {
   const [expandedModelId, setExpandedModelId] = useState<number | null>(null);
   const [modelMappings, setModelMappings] = useState<Record<number, ModelMapping[]>>({});
   const [activeTab, setActiveTab] = useState<'claudecode' | 'all'>('claudecode');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [deletingMappingId, setDeletingMappingId] = useState<number | null>(null);
 
   // AddMapping 相关状态
@@ -60,6 +63,68 @@ export default function ModelManagement() {
   const [editingMappingForm, setEditingMappingForm] = useState<{ weight: number; priority: number }>({ weight: 50, priority: 1 });
 
   const claudeCodeModelSet = useMemo(() => new Set(CLAUDE_CODE_MODEL_NAMES), []);
+  const VIEW_MODE_ICONS: Record<ViewMode, JSX.Element> = useMemo(
+    () => ({
+      card: (
+        <svg
+          className="h-4 w-4"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
+          <rect x="3" y="3" width="5" height="5" rx="1" />
+          <rect x="12" y="3" width="5" height="5" rx="1" />
+          <rect x="3" y="12" width="5" height="5" rx="1" />
+          <rect x="12" y="12" width="5" height="5" rx="1" />
+        </svg>
+      ),
+      list: (
+        <svg
+          className="h-4 w-4"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
+          <circle cx="4" cy="5" r="1.5" />
+          <circle cx="4" cy="10" r="1.5" />
+          <circle cx="4" cy="15" r="1.5" />
+          <path d="M8 5h9" />
+          <path d="M8 10h9" />
+          <path d="M8 15h9" />
+        </svg>
+      ),
+      compact: (
+        <svg
+          className="h-4 w-4"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
+          <rect x="3" y="4" width="14" height="4" rx="1" />
+          <rect x="3" y="12" width="9" height="4" rx="1" />
+          <path d="M15 12h2" />
+          <path d="M15 16h2" />
+        </svg>
+      ),
+    }),
+    []
+  );
+
+  const VIEW_MODE_OPTIONS: { value: ViewMode; label: string }[] = useMemo(
+    () => [
+      { value: 'card', label: '卡片模式' },
+      { value: 'list', label: '列表模式' },
+      { value: 'compact', label: '紧凑模式' },
+    ],
+    []
+  );
+
   const filteredModels = useMemo(() => (
     activeTab === 'claudecode'
       ? models.filter(model => claudeCodeModelSet.has(model.name))
@@ -255,6 +320,343 @@ export default function ModelManagement() {
     }
   };
 
+  const renderMappingSection = (model: UnifiedModel, layout: 'card' | 'list' | 'compact') => {
+    if (expandedModelId !== model.id) return null;
+
+    const containerClass =
+      layout === 'card'
+        ? 'border-t border-gray-200 bg-gray-50 p-6'
+        : 'border border-gray-200 bg-gray-50 p-4 rounded-b-lg';
+
+    const mappings = modelMappings[model.id];
+
+    return (
+      <div className={containerClass}>
+        <h4 className="text-sm font-medium text-gray-900 mb-4">供应商映射</h4>
+        {mappings && mappings.length > 0 ? (
+          <div className="space-y-3">
+            {mappings.map((mapping) => {
+              const isEditing = editingMappingId === mapping.id;
+              const providerName = providers.find((p) => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`;
+              return (
+                <div key={mapping.id} className="bg-white p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-sm font-mono text-gray-900">
+                          {providerName}/{mapping.target_model}
+                        </span>
+                        {mapping.enabled ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">启用</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">禁用</span>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <div className="space-y-3 mt-3">
+                          <div className="flex gap-4">
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                <span className="inline-flex items-center gap-1">
+                                  权重 (1-100)
+                                  <span
+                                    className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
+                                    title="负载均衡时的权重值，数值越大被选中的概率越高"
+                                  >
+                                    ?
+                                  </span>
+                                </span>
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={editingMappingForm.weight}
+                                onChange={(e) =>
+                                  setEditingMappingForm({
+                                    ...editingMappingForm,
+                                    weight: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)),
+                                  })
+                                }
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                <span className="inline-flex items-center gap-1">
+                                  优先级 (≥1)
+                                  <span
+                                    className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
+                                    title="映射优先级，数字越小优先级越高"
+                                  >
+                                    ?
+                                  </span>
+                                </span>
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={editingMappingForm.priority}
+                                onChange={(e) =>
+                                  setEditingMappingForm({
+                                    ...editingMappingForm,
+                                    priority: Math.max(1, parseInt(e.target.value) || 1),
+                                  })
+                                }
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-4 text-xs text-gray-500">
+                          <span>权重: {mapping.weight}</span>
+                          <span>优先级: {mapping.priority}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 ml-4">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={() => handleSaveMapping(mapping.id, model.id)}
+                            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                          >
+                            保存
+                          </button>
+                          <button
+                            onClick={handleCancelEditMapping}
+                            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                          >
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleEditMapping(mapping)}
+                            className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMapping(mapping.id, model.id, providerName, mapping.target_model)}
+                            disabled={deletingMappingId === mapping.id}
+                            className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
+                              deletingMappingId === mapping.id ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            {deletingMappingId === mapping.id ? '删除中...' : '删除'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500">暂无映射，点击“添加映射”按钮进行配置。</div>
+        )}
+      </div>
+    );
+  };
+
+  const renderListActions = (model: UnifiedModel) => (
+    <div className="flex flex-wrap gap-2">
+      <button onClick={() => handleAddMapping(model)} className="px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100">
+        添加映射
+      </button>
+      <button onClick={() => handleEditModel(model)} className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+        编辑
+      </button>
+      <button
+        onClick={() => handleDeleteModel(model.id, model.name)}
+        disabled={deletingId === model.id}
+        className={`px-2.5 py-1 text-xs font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-opacity ${
+          deletingId === model.id ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+      >
+        {deletingId === model.id ? '删除中...' : '删除'}
+      </button>
+      <button onClick={() => handleToggleExpand(model.id)} className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+        {expandedModelId === model.id ? '收起' : '展开映射'}
+      </button>
+    </div>
+  );
+
+  const renderCompactActions = (model: UnifiedModel) => (
+    <div className="flex flex-wrap gap-2 text-xs">
+      <button onClick={() => handleAddMapping(model)} className="px-2 py-1 bg-blue-50 text-blue-600 rounded">
+        映射
+      </button>
+      <button onClick={() => handleEditModel(model)} className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+        编辑
+      </button>
+      <button
+        onClick={() => handleDeleteModel(model.id, model.name)}
+        disabled={deletingId === model.id}
+        className={`px-2 py-1 bg-red-50 text-red-600 rounded transition-opacity ${
+          deletingId === model.id ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+      >
+        {deletingId === model.id ? '删除中...' : '删除'}
+      </button>
+      <button onClick={() => handleToggleExpand(model.id)} className="px-2 py-1 bg-gray-100 text-gray-700 rounded">
+        {expandedModelId === model.id ? '收起' : '明细'}
+      </button>
+    </div>
+  );
+
+  const renderCardActions = (model: UnifiedModel) => (
+    <div className="flex gap-2">
+      <button
+        onClick={() => handleAddMapping(model)}
+        className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
+      >
+        添加映射
+      </button>
+      <button
+        onClick={() => handleEditModel(model)}
+        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+      >
+        编辑
+      </button>
+      <button
+        onClick={() => handleDeleteModel(model.id, model.name)}
+        disabled={deletingId === model.id}
+        className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
+          deletingId === model.id ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+        title={deletingId === model.id ? '正在删除...' : '删除模型'}
+      >
+        {deletingId === model.id ? '删除中...' : '删除'}
+      </button>
+      <button
+        onClick={() => handleToggleExpand(model.id)}
+        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+      >
+        {expandedModelId === model.id ? '收起' : '展开映射'}
+      </button>
+    </div>
+  );
+
+  const renderCardContent = (model: UnifiedModel) => {
+    const mappingCount = modelMappings[model.id]?.length ?? 0;
+    return (
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-xl font-semibold text-gray-900">{model.display_name}</h3>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {model.name}
+              </span>
+              {mappingCount > 0 && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  {mappingCount} 个映射
+                </span>
+              )}
+            </div>
+            {model.description && <p className="text-sm text-gray-600">{model.description}</p>}
+          </div>
+          {renderCardActions(model)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderModels = () => {
+    if (filteredModels.length === 0) {
+      return (
+        <div className="bg-white rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
+          暂无模型，点击右上角“创建统一模型”按钮进行添加。
+        </div>
+      );
+    }
+
+    if (viewMode === 'list') {
+      return (
+        <div className="bg-white rounded-lg shadow">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">模型名称</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">别名</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">映射数量</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredModels.map((model) => {
+                const mappingCount = modelMappings[model.id]?.length ?? 0;
+                return (
+                  <Fragment key={model.id}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{model.display_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{model.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 truncate max-w-xs">{model.description || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{mappingCount}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{renderListActions(model)}</td>
+                    </tr>
+                    {expandedModelId === model.id && (
+                      <tr className="bg-gray-50">
+                        <td colSpan={5} className="px-4 py-4">
+                          {renderMappingSection(model, 'list')}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    if (viewMode === 'compact') {
+      return (
+        <div className="space-y-3">
+          {filteredModels.map((model) => {
+            const mappingCount = modelMappings[model.id]?.length ?? 0;
+            return (
+              <div key={model.id} className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900">{model.display_name}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">{model.name}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">映射 {mappingCount}</span>
+                    </div>
+                    {model.description && <p className="mt-1 text-xs text-gray-500 line-clamp-2">{model.description}</p>}
+                  </div>
+                  {renderCompactActions(model)}
+                </div>
+                {renderMappingSection(model, 'compact')}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 gap-6">
+        {filteredModels.map((model) => (
+          <div key={model.id} className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow">
+            {renderCardContent(model)}
+            {renderMappingSection(model, 'card')}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -306,18 +708,18 @@ export default function ModelManagement() {
             </p>
           </div>
           <div className="flex gap-3">
-            <button
-              onClick={handleCreateModel}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
-            >
-              创建统一模型
-            </button>
             <a
               href="/"
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
             >
               返回首页
             </a>
+            <button
+              onClick={handleCreateModel}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+            >
+              创建统一模型
+            </button>
           </div>
         </div>
 
@@ -349,228 +751,39 @@ export default function ModelManagement() {
           </nav>
         </div>
 
-        {/* 模型列表 */}
-        <div className="grid grid-cols-1 gap-6">
-          {filteredModels.length > 0 ? (
-            filteredModels.map((model) => (
-              <div
-                key={model.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow"
-              >
-                {/* 模型卡片头部 */}
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-semibold text-gray-900">
-                          {model.display_name}
-                        </h3>
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {model.name}
-                        </span>
-                        {modelMappings[model.id] && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {modelMappings[model.id].length} 个映射
-                          </span>
-                        )}
-                      </div>
-                      {model.description && (
-                        <p className="text-sm text-gray-600">{model.description}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAddMapping(model)}
-                        className="px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100"
-                      >
-                        添加映射
-                      </button>
-                      <button
-                        onClick={() => handleEditModel(model)}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                      >
-                        编辑
-                      </button>
-                      <button
-                        onClick={() => handleDeleteModel(model.id, model.name)}
-                        disabled={deletingId === model.id}
-                        className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
-                          deletingId === model.id ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        title={deletingId === model.id ? '正在删除...' : '删除模型'}
-                      >
-                        {deletingId === model.id ? '删除中...' : '删除'}
-                      </button>
-                      <button
-                        onClick={() => handleToggleExpand(model.id)}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                      >
-                        {expandedModelId === model.id ? '收起' : '展开映射'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <span>ID: {model.id}</span>
-                    <span>创建于 {new Date(model.created_at).toLocaleString('zh-CN')}</span>
-                  </div>
-                </div>
-
-                {/* 映射列表（展开式） */}
-                {expandedModelId === model.id && (
-                  <div className="border-t border-gray-200 bg-gray-50 p-6">
-                    <h4 className="text-sm font-medium text-gray-900 mb-4">供应商映射</h4>
-                    {modelMappings[model.id] && modelMappings[model.id].length > 0 ? (
-                      <div className="space-y-3">
-                        {modelMappings[model.id].map((mapping) => {
-                          const isEditing = editingMappingId === mapping.id;
-                          return (
-                            <div
-                              key={mapping.id}
-                              className="bg-white p-4 rounded-lg border border-gray-200"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <span className="text-sm font-mono text-gray-900">
-                                      {providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`}/{mapping.target_model}
-                                    </span>
-                                    {mapping.enabled ? (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                        启用
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                        禁用
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {isEditing ? (
-                                    <div className="space-y-3 mt-3">
-                                      <div className="flex gap-4">
-                                        <div className="flex-1">
-                                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            <span className="inline-flex items-center gap-1">
-                                              权重 (1-100)
-                                              <span
-                                                className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
-                                                title="负载均衡时的权重值，数值越大被选中的概率越高"
-                                              >
-                                                ?
-                                              </span>
-                                            </span>
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            max="100"
-                                            value={editingMappingForm.weight}
-                                            onChange={(e) => setEditingMappingForm({ ...editingMappingForm, weight: parseInt(e.target.value) || 1 })}
-                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          />
-                                        </div>
-                                        <div className="flex-1">
-                                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            <span className="inline-flex items-center gap-1">
-                                              优先级 (≥1)
-                                              <span
-                                                className="inline-flex items-center justify-center w-4 h-4 text-xs text-gray-500 border border-gray-300 rounded-full cursor-help hover:bg-gray-100 transition-colors"
-                                                title="映射的优先级，数字越小优先级越高，优先级高的映射会被优先使用"
-                                              >
-                                                ?
-                                              </span>
-                                            </span>
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            value={editingMappingForm.priority}
-                                            onChange={(e) => setEditingMappingForm({ ...editingMappingForm, priority: parseInt(e.target.value) || 1 })}
-                                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex gap-4 text-xs text-gray-500">
-                                      <span>权重: {mapping.weight}</span>
-                                      <span>优先级: {mapping.priority}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="flex gap-2 ml-4">
-                                  {isEditing ? (
-                                    <>
-                                      <button
-                                        onClick={() => handleSaveMapping(mapping.id, model.id)}
-                                        className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-                                      >
-                                        保存
-                                      </button>
-                                      <button
-                                        onClick={handleCancelEditMapping}
-                                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                                      >
-                                        取消
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => handleEditMapping(mapping)}
-                                        className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-                                      >
-                                        编辑
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          const providerName = providers.find(p => p.id === mapping.provider_id)?.name || `Provider #${mapping.provider_id}`;
-                                          handleDeleteMapping(mapping.id, model.id, providerName, mapping.target_model);
-                                        }}
-                                        disabled={deletingMappingId === mapping.id}
-                                        className={`px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-opacity ${
-                                          deletingMappingId === mapping.id ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
-                                        title={deletingMappingId === mapping.id ? '正在删除...' : '删除映射'}
-                                      >
-                                        {deletingMappingId === mapping.id ? '删除中...' : '删除'}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-gray-500">
-                        暂无映射，点击上方"添加映射"按钮添加
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              {activeTab === 'claudecode' ? (
-                <p className="text-gray-500">ClaudeCode 默认模型暂未配置，请先在“全部模型”页完成设置。</p>
-              ) : (
-                <>
-                  <p className="text-gray-500 mb-4">暂无统一模型</p>
-                  <button
-                    onClick={handleCreateModel}
-                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
-                  >
-                    创建第一个模型
-                  </button>
-                </>
-              )}
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-500">
+              {filteredModels.length > 0 ? `共 ${filteredModels.length} 个模型` : '暂无模型数据'}
             </div>
-          )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500">视图模式</span>
+              <div className="inline-flex divide-x divide-gray-200 rounded-md border border-gray-200 shadow-sm">
+                {VIEW_MODE_OPTIONS.map((option) => {
+                  const isActive = viewMode === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setViewMode(option.value)}
+                      className={`p-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white ${
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                      aria-pressed={isActive}
+                      aria-label={option.label}
+                      title={option.label}
+                    >
+                      {VIEW_MODE_ICONS[option.value]}
+                      <span className="sr-only">{option.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {renderModels()}
         </div>
 
         {/* 创建/编辑模型模态框 */}
