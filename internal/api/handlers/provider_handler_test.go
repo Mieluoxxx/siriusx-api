@@ -57,9 +57,10 @@ func TestCreateProvider_Success(t *testing.T) {
 	router, _ := setupTestHandler(t)
 
 	reqBody := provider.CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "claude-sonnet-4",
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -115,25 +116,28 @@ func TestCreateProvider_ValidationError(t *testing.T) {
 		{
 			name: "empty name",
 			reqBody: provider.CreateProviderRequest{
-				Name:    "",
-				BaseURL: "https://api.test.com",
-				APIKey:  "sk-test-key",
+				Name:      "",
+				BaseURL:   "https://api.test.com",
+				APIKey:    "sk-test-key",
+				TestModel: "claude-sonnet-4",
 			},
 		},
 		{
 			name: "invalid URL",
 			reqBody: provider.CreateProviderRequest{
-				Name:    "Test Provider",
-				BaseURL: "invalid-url",
-				APIKey:  "sk-test-key",
+				Name:      "Test Provider",
+				BaseURL:   "invalid-url",
+				APIKey:    "sk-test-key",
+				TestModel: "claude-sonnet-4",
 			},
 		},
 		{
 			name: "empty API key",
 			reqBody: provider.CreateProviderRequest{
-				Name:    "Test Provider",
-				BaseURL: "https://api.test.com",
-				APIKey:  "",
+				Name:      "Test Provider",
+				BaseURL:   "https://api.test.com",
+				APIKey:    "",
+				TestModel: "claude-sonnet-4",
 			},
 		},
 	}
@@ -159,9 +163,10 @@ func TestCreateProvider_DuplicateName(t *testing.T) {
 	router, _ := setupTestHandler(t)
 
 	reqBody := provider.CreateProviderRequest{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "claude-sonnet-4",
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -188,9 +193,10 @@ func TestGetProvider_Success(t *testing.T) {
 
 	// 创建测试数据
 	testProvider := &models.Provider{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key-12345",
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key-12345",
+		TestModel: "claude-sonnet-4",
 	}
 	db.Create(testProvider)
 

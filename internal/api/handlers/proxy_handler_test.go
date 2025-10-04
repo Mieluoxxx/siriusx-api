@@ -17,16 +17,14 @@ func TestShouldConvertToOpenAI(t *testing.T) {
 	handler := &ProxyHandler{}
 
 	claudeProvider := &models.Provider{BaseURL: "https://api.anthropic.com"}
-	claudeMapping := &models.ModelMapping{TargetModel: "claude-3-5-sonnet"}
 
-	if handler.shouldConvertToOpenAI(claudeProvider, claudeMapping) {
+	if handler.shouldConvertToOpenAI(claudeProvider, "claude-3-5-sonnet") {
 		t.Fatalf("expected anthropic upstream to skip conversion")
 	}
 
 	openAIProvider := &models.Provider{BaseURL: "https://newapi.ixio.cc"}
-	openAIMapping := &models.ModelMapping{TargetModel: "glm-4.6"}
 
-	if !handler.shouldConvertToOpenAI(openAIProvider, openAIMapping) {
+	if !handler.shouldConvertToOpenAI(openAIProvider, "glm-4.6") {
 		t.Fatalf("expected non-claude upstream to require conversion")
 	}
 }
@@ -71,8 +69,6 @@ func TestForwardClaudeViaOpenAI(t *testing.T) {
 		BaseURL: server.URL,
 		APIKey:  "sk-test",
 	}
-	mapping := &models.ModelMapping{TargetModel: "glm-4.6"}
-
 	raw := []byte(`{
         "model": "claude-sonnet-4-5-20250929",
         "messages": [{
@@ -94,7 +90,7 @@ func TestForwardClaudeViaOpenAI(t *testing.T) {
 	c.Request = httptest.NewRequest("POST", "/v1/messages", bytes.NewBuffer(raw))
 	c.Request.Header.Set("Content-Type", "application/json")
 
-	handler.forwardClaudeViaOpenAI(c, provider, mapping, req)
+	handler.forwardClaudeViaOpenAI(c, provider, "glm-4.6", req)
 
 	resp := w.Result()
 	if resp.StatusCode != http.StatusOK {

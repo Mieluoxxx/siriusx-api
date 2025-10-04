@@ -55,6 +55,7 @@ func TestModelHandler_CreateModel_Success(t *testing.T) {
 
 	reqBody := mapping.CreateModelRequest{
 		Name:        "claude-sonnet-4",
+		DisplayName: "Claude Sonnet 4",
 		Description: "Claude Sonnet 4 model",
 	}
 
@@ -117,6 +118,7 @@ func TestModelHandler_CreateModel_DuplicateName(t *testing.T) {
 
 	reqBody := mapping.CreateModelRequest{
 		Name:        "claude-sonnet-4",
+		DisplayName: "Claude Sonnet 4",
 		Description: "Claude Sonnet 4 model",
 	}
 
@@ -151,8 +153,8 @@ func TestModelHandler_ListModels_Success(t *testing.T) {
 
 	// 创建测试数据
 	models := []mapping.CreateModelRequest{
-		{Name: "claude-sonnet-4", Description: "Claude Sonnet 4"},
-		{Name: "gpt-4o", Description: "GPT-4o"},
+		{Name: "claude-sonnet-4", DisplayName: "claude-sonnet-4", Description: "Claude Sonnet 4"},
+		{Name: "gpt-4o", DisplayName: "gpt-4o", Description: "GPT-4o"},
 	}
 
 	for _, model := range models {
@@ -189,6 +191,7 @@ func TestModelHandler_ListModels_WithPagination(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		model := mapping.CreateModelRequest{
 			Name:        fmt.Sprintf("model-%d", i),
+			DisplayName: fmt.Sprintf("model-%d", i),
 			Description: fmt.Sprintf("Model %d", i),
 		}
 
@@ -224,9 +227,9 @@ func TestModelHandler_ListModels_WithSearch(t *testing.T) {
 
 	// 创建测试数据
 	models := []mapping.CreateModelRequest{
-		{Name: "claude-sonnet-4", Description: "Claude Sonnet 4"},
-		{Name: "claude-haiku", Description: "Claude Haiku"},
-		{Name: "gpt-4o", Description: "GPT-4o"},
+		{Name: "claude-sonnet-4", DisplayName: "claude-sonnet-4", Description: "Claude Sonnet 4"},
+		{Name: "claude-haiku", DisplayName: "claude-haiku", Description: "Claude Haiku"},
+		{Name: "gpt-4o", DisplayName: "gpt-4o", Description: "GPT-4o"},
 	}
 
 	for _, model := range models {
@@ -329,6 +332,7 @@ func TestModelHandler_UpdateModel_Success(t *testing.T) {
 	// 创建测试模型
 	createReq := mapping.CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "test-model",
 		Description: "Original description",
 	}
 
@@ -394,6 +398,7 @@ func TestModelHandler_DeleteModel_Success(t *testing.T) {
 	// 创建测试模型
 	createReq := mapping.CreateModelRequest{
 		Name:        "test-model",
+		DisplayName: "test-model",
 		Description: "Test model",
 	}
 
