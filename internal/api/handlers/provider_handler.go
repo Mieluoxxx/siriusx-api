@@ -286,6 +286,15 @@ func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 			})
 			return
 		}
+		if errors.Is(err, provider.ErrProviderLinked) {
+			c.JSON(http.StatusConflict, provider.ErrorResponse{
+				Error: provider.ErrorDetail{
+					Code:    "PROVIDER_IN_USE",
+					Message: "Provider has active model mappings",
+				},
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, provider.ErrorResponse{
 			Error: provider.ErrorDetail{
 				Code:    "INTERNAL_ERROR",

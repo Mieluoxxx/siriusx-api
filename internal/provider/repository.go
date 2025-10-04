@@ -98,6 +98,16 @@ func (r *Repository) Delete(id uint) error {
 	return nil
 }
 
+// HasMappings 检查供应商是否存在模型映射
+func (r *Repository) HasMappings(providerID uint) (bool, error) {
+	var count int64
+	err := r.db.Model(&models.ModelMapping{}).Where("provider_id = ?", providerID).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 // CheckNameExists 检查名称是否存在（排除指定 ID）
 func (r *Repository) CheckNameExists(name string, excludeID uint) (bool, error) {
 	var count int64

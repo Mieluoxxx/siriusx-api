@@ -15,6 +15,8 @@ var (
 	ErrInvalidInput = errors.New("invalid input")
 	// ErrInvalidURL 无效 URL
 	ErrInvalidURL = errors.New("invalid URL")
+	// ErrProviderLinked 供应商被模型映射引用
+	ErrProviderLinked = errors.New("provider has active model mappings")
 )
 
 // Service 供应商业务逻辑层
@@ -208,6 +210,15 @@ func (s *Service) UpdateProvider(id uint, req UpdateProviderRequest) (*models.Pr
 
 // DeleteProvider 删除供应商（硬删除）
 func (s *Service) DeleteProvider(id uint) error {
+	// 检查是否存在模型映射引用
+	hasMappings, err := s.repo.HasMappings(id)
+	if err != nil {
+		return err
+	}
+	if hasMappings {
+		return ErrProviderLinked
+	}
+
 	return s.repo.Delete(id)
 }
 

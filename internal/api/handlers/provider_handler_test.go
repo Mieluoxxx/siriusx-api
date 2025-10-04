@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +27,7 @@ func setupTestHandler(t *testing.T) (*gin.Engine, *gorm.DB) {
 	}
 
 	// 自动迁移
-	if err := db.AutoMigrate(&models.Provider{}); err != nil {
+	if err := db.AutoMigrate(&models.UnifiedModel{}, &models.Provider{}, &models.ModelMapping{}); err != nil {
 		t.Fatalf("failed to migrate test database: %v", err)
 	}
 
@@ -410,10 +411,11 @@ func TestDeleteProvider_Success(t *testing.T) {
 
 	// 创建测试数据
 	testProvider := &models.Provider{
-		Name:    "Test Provider",
-		BaseURL: "https://api.test.com",
-		APIKey:  "sk-test-key",
-		Enabled: true,
+		Name:      "Test Provider",
+		BaseURL:   "https://api.test.com",
+		APIKey:    "sk-test-key",
+		TestModel: "claude-sonnet-4",
+		Enabled:   true,
 	}
 	db.Create(testProvider)
 
@@ -431,6 +433,50 @@ func TestDeleteProvider_Success(t *testing.T) {
 	db.First(&deleted, 1)
 	if deleted.Enabled {
 		t.Error("Provider should be disabled after soft delete")
+	}
+}
+
+func TestDeleteProvider_WithMappings(t *testing.T) {
+	router, db := setupTestHandler(t)
+
+	provider := &models.Provider{
+		Name:      "Provider With Mapping",
+		BaseURL:   "https://api.mapping.com",
+		APIKey:    "sk-mapping",
+		TestModel: "claude-sonnet-4",
+		Enabled:   true,
+	}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+
+	model := &models.UnifiedModel{
+		Name:        "mapping-model",
+		DisplayName: "mapping-model",
+		Description: "test model",
+	}
+	if err := db.Create(model).Error; err != nil {
+		t.Fatalf("failed to create unified model: %v", err)
+	}
+
+	mapping := &models.ModelMapping{
+		UnifiedModelID: model.ID,
+		ProviderID:     provider.ID,
+		TargetModel:    "gpt-4o",
+		Weight:         50,
+		Priority:       1,
+		Enabled:        true,
+	}
+	if err := db.Create(mapping).Error; err != nil {
+		t.Fatalf("failed to create model mapping: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/api/providers/%d", provider.ID), nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", resp.Code)
 	}
 }
 
