@@ -9,7 +9,7 @@ import (
 // CreateModelRequest 创建统一模型请求
 type CreateModelRequest struct {
 	Name        string `json:"name" binding:"required,max=100"`
-	DisplayName string `json:"display_name" binding:"required,max=200"`
+	DisplayName string `json:"display_name" binding:"omitempty,max=200"`
 	Description string `json:"description" binding:"max=500"`
 }
 
@@ -80,7 +80,7 @@ type CreateMappingRequest struct {
 	ProviderID     uint   `json:"provider_id" binding:"required"`
 	TargetModel    string `json:"target_model" binding:"required,max=100"`
 	Weight         int    `json:"weight" binding:"omitempty,min=1,max=100"` // 可选，默认50
-	Priority       int    `json:"priority" binding:"omitempty,min=1"`        // 可选，默认1
+	Priority       int    `json:"priority" binding:"omitempty,min=1"`       // 可选，默认1
 	Enabled        bool   `json:"enabled"`
 }
 
@@ -94,17 +94,17 @@ type UpdateMappingRequest struct {
 
 // MappingResponse 映射响应
 type MappingResponse struct {
-	ID             uint                    `json:"id"`
-	UnifiedModelID uint                    `json:"unified_model_id"`
-	ProviderID     uint                    `json:"provider_id"`
-	TargetModel    string                  `json:"target_model"`
-	Weight         int                     `json:"weight"`
-	Priority       int                     `json:"priority"`
-	Enabled        bool                    `json:"enabled"`
-	Provider       *ProviderInfoResponse   `json:"provider,omitempty"`
-	UnifiedModel   *ModelInfoResponse      `json:"unified_model,omitempty"`
-	CreatedAt      time.Time               `json:"created_at"`
-	UpdatedAt      time.Time               `json:"updated_at"`
+	ID             uint                  `json:"id"`
+	UnifiedModelID uint                  `json:"unified_model_id"`
+	ProviderID     uint                  `json:"provider_id"`
+	TargetModel    string                `json:"target_model"`
+	Weight         int                   `json:"weight"`
+	Priority       int                   `json:"priority"`
+	Enabled        bool                  `json:"enabled"`
+	Provider       *ProviderInfoResponse `json:"provider,omitempty"`
+	UnifiedModel   *ModelInfoResponse    `json:"unified_model,omitempty"`
+	CreatedAt      time.Time             `json:"created_at"`
+	UpdatedAt      time.Time             `json:"updated_at"`
 }
 
 // ProviderInfoResponse 供应商基本信息响应（用于关联查询）

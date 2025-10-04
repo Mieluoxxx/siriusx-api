@@ -54,7 +54,12 @@ func (s *Service) CreateModel(req CreateModelRequest) (*ModelResponse, error) {
 		return nil, err
 	}
 
-	if err := s.validateDisplayName(req.DisplayName); err != nil {
+	displayName := strings.TrimSpace(req.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(req.Name)
+	}
+
+	if err := s.validateDisplayName(displayName); err != nil {
 		return nil, err
 	}
 
@@ -74,7 +79,7 @@ func (s *Service) CreateModel(req CreateModelRequest) (*ModelResponse, error) {
 	// 创建模型实体
 	model := &models.UnifiedModel{
 		Name:        strings.TrimSpace(req.Name),
-		DisplayName: strings.TrimSpace(req.DisplayName),
+		DisplayName: displayName,
 		Description: strings.TrimSpace(req.Description),
 	}
 
@@ -168,6 +173,9 @@ func (s *Service) UpdateModel(id uint, req UpdateModelRequest) (*ModelResponse, 
 
 	if req.DisplayName != nil {
 		newDisplayName := strings.TrimSpace(*req.DisplayName)
+		if newDisplayName == "" {
+			newDisplayName = strings.TrimSpace(model.Name)
+		}
 		if err := s.validateDisplayName(newDisplayName); err != nil {
 			return nil, err
 		}

@@ -11,7 +11,7 @@ import (
 type Token struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	Name      string         `gorm:"type:varchar(100);not null" json:"name"`
-	Token     string         `gorm:"type:varchar(100);not null" json:"token"`
+	Token     string         `gorm:"type:varchar(100);not null;uniqueIndex" json:"token"`
 	Enabled   bool           `gorm:"default:true;not null" json:"enabled"`
 	ExpiresAt *time.Time     `json:"expires_at,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
