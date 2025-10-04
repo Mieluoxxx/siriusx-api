@@ -86,7 +86,7 @@ func TestConvertFinishReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertFinishReason(tt.finishReason)
+			result := ConvertFinishReasonToStopReason(tt.finishReason)
 			if result != tt.expectedStop {
 				t.Errorf("Expected %s, got %s", tt.expectedStop, result)
 			}

@@ -8,8 +8,9 @@ import (
 
 // ConvertClaudeToOpenAI 将 Claude Messages API 请求转换为 OpenAI Chat Completions API 请求
 func ConvertClaudeToOpenAI(req *ClaudeRequest) (*OpenAIRequest, error) {
-	if req == nil {
-		return nil, fmt.Errorf("请求不能为空")
+	// 验证输入
+	if err := ValidateNonNil(req, "Claude请求"); err != nil {
+		return nil, NewConversionError("request", "验证失败", err)
 	}
 
 	// 创建 OpenAI 请求
@@ -25,7 +26,7 @@ func ConvertClaudeToOpenAI(req *ClaudeRequest) (*OpenAIRequest, error) {
 	// 转换 messages
 	messages, err := convertMessages(req.Messages, req.System)
 	if err != nil {
-		return nil, fmt.Errorf("转换消息失败: %w", err)
+		return nil, NewConversionError("request", "转换消息失败", err)
 	}
 	openaiReq.Messages = messages
 
@@ -71,7 +72,7 @@ func convertSingleMessage(msg ClaudeMessage) ([]OpenAIMessage, error) {
 	// 检查是否有 tool_result
 	hasToolResult := false
 	for _, block := range msg.Content {
-		if block.Type == "tool_result" {
+		if block.Type == ContentTypeToolResult {
 			hasToolResult = true
 			break
 		}
@@ -84,9 +85,9 @@ func convertSingleMessage(msg ClaudeMessage) ([]OpenAIMessage, error) {
 
 	// 普通消息转换
 	switch msg.Role {
-	case "user":
+	case ClaudeRoleUser:
 		return []OpenAIMessage{convertUserMessage(msg)}, nil
-	case "assistant":
+	case ClaudeRoleAssistant:
 		return []OpenAIMessage{convertAssistantMessage(msg)}, nil
 	default:
 		return nil, fmt.Errorf("不支持的角色: %s", msg.Role)
@@ -96,9 +97,9 @@ func convertSingleMessage(msg ClaudeMessage) ([]OpenAIMessage, error) {
 // convertUserMessage 转换用户消息
 func convertUserMessage(msg ClaudeMessage) OpenAIMessage {
 	// 检查是否只有一个文本块
-	if len(msg.Content) == 1 && msg.Content[0].Type == "text" && msg.Content[0].Text != nil {
+	if len(msg.Content) == 1 && msg.Content[0].Type == ContentTypeText && msg.Content[0].Text != nil {
 		return OpenAIMessage{
-			Role:    "user",
+			Role:    ClaudeRoleUser,
 			Content: *msg.Content[0].Text,
 		}
 	}
@@ -107,14 +108,14 @@ func convertUserMessage(msg ClaudeMessage) OpenAIMessage {
 	var contentBlocks []OpenAIContentBlock
 	for _, block := range msg.Content {
 		switch block.Type {
-		case "text":
+		case ContentTypeText:
 			if block.Text != nil {
 				contentBlocks = append(contentBlocks, OpenAIContentBlock{
-					Type: "text",
+					Type: ContentTypeText,
 					Text: block.Text,
 				})
 			}
-		case "image":
+		case ContentTypeImage:
 			if block.Source != nil {
 				// 转换图片为 data URI
 				dataURI := fmt.Sprintf("data:%s;base64,%s",
@@ -131,7 +132,7 @@ func convertUserMessage(msg ClaudeMessage) OpenAIMessage {
 	}
 
 	return OpenAIMessage{
-		Role:    "user",
+		Role:    ClaudeRoleUser,
 		Content: contentBlocks,
 	}
 }
@@ -144,17 +145,17 @@ func convertAssistantMessage(msg ClaudeMessage) OpenAIMessage {
 	// 分离文本和工具调用
 	for _, block := range msg.Content {
 		switch block.Type {
-		case "text":
+		case ContentTypeText:
 			if block.Text != nil {
 				textParts = append(textParts, *block.Text)
 			}
-		case "tool_use":
+		case ContentTypeToolUse:
 			if block.ID != nil && block.Name != nil {
 				// 序列化 input 为 JSON 字符串
 				args, _ := json.Marshal(block.Input)
 				toolCalls = append(toolCalls, OpenAIToolCall{
 					ID:   *block.ID,
-					Type: "function",
+					Type: OpenAIToolTypeFunction,
 					Function: OpenAIFunctionCall{
 						Name:      *block.Name,
 						Arguments: string(args),
@@ -168,7 +169,7 @@ func convertAssistantMessage(msg ClaudeMessage) OpenAIMessage {
 	content := strings.Join(textParts, "")
 
 	return OpenAIMessage{
-		Role:      "assistant",
+		Role:      ClaudeRoleAssistant,
 		Content:   content,
 		ToolCalls: toolCalls,
 	}
@@ -180,7 +181,7 @@ func convertToolResultMessage(msg ClaudeMessage) ([]OpenAIMessage, error) {
 
 	// 每个 tool_result 转换为独立的消息
 	for _, block := range msg.Content {
-		if block.Type == "tool_result" {
+		if block.Type == ContentTypeToolResult {
 			if block.ToolUseID == nil {
 				return nil, fmt.Errorf("tool_result 缺少 tool_use_id")
 			}
@@ -207,7 +208,7 @@ func convertTools(claudeTools []ClaudeTool) []OpenAITool {
 
 	for _, tool := range claudeTools {
 		openaiTools = append(openaiTools, OpenAITool{
-			Type: "function",
+			Type: OpenAIToolTypeFunction,
 			Function: OpenAIFunctionDef{
 				Name:        tool.Name,
 				Description: tool.Description,
@@ -220,7 +221,7 @@ func convertTools(claudeTools []ClaudeTool) []OpenAITool {
 }
 
 // convertToolChoice 转换 tool_choice
-func convertToolChoice(choice *ClaudeToolChoice) interface{} {
+func convertToolChoice(choice *ClaudeToolChoice) any {
 	if choice == nil {
 		return nil
 	}
@@ -232,8 +233,8 @@ func convertToolChoice(choice *ClaudeToolChoice) interface{} {
 		return "required"
 	case "tool":
 		if choice.Name != nil {
-			return map[string]interface{}{
-				"type": "function",
+			return map[string]any{
+				"type": OpenAIToolTypeFunction,
 				"function": map[string]string{
 					"name": *choice.Name,
 				},

@@ -45,6 +45,31 @@ func NewStreamConverter() *StreamConverter {
 	}
 }
 
+// ResetState 重置流式转换器状态
+// 参考 Api-Conversion 的 reset_streaming_state() 设计
+// 避免状态污染，在流开始时调用
+func (c *StreamConverter) ResetState() {
+	// 重置元数据
+	c.messageID = ""
+	c.model = ""
+	c.role = ""
+	c.created = 0
+
+	// 重置状态管理
+	c.currentIndex = -1
+	c.messageStarted = false
+	c.blockStarted = false
+	c.currentBlockType = ""
+
+	// 重置累积状态
+	c.textBuffer.Reset()
+	c.toolCallsBuffer = make(map[int]*ToolCallState)
+
+	// 重置统计
+	c.inputTokens = 0
+	c.outputTokens = 0
+}
+
 // ConvertStream 转换 OpenAI 流式响应为 Claude 流式响应
 func ConvertStream(ctx context.Context, openaiStream io.Reader) (io.Reader, error) {
 	// 创建管道用于零拷贝传输
@@ -258,7 +283,7 @@ func (c *StreamConverter) processChunk(chunk *OpenAIStreamChunk) ([]string, erro
 		}
 
 		// 转换 finish_reason
-		stopReason := convertFinishReason(*choice.FinishReason)
+		stopReason := ConvertFinishReasonToStopReason(*choice.FinishReason)
 
 		// 发送 message_delta
 		event, err := c.emitMessageDelta(stopReason)
