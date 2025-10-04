@@ -1,3 +1,6 @@
+[submodule "ref_proj/Api-Conversion"]
+	path = ref_proj/Api-Conversion
+	url = https://github.com/chinrain/Api-Conversion.git
 [submodule "ref_proj/claude-code-nexus"]
 	path = ref_proj/claude-code-nexus
 	url = https://github.com/KroMiose/claude-code-nexus.git
